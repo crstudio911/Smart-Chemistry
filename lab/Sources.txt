@@ -1,0 +1,25 @@
+Smart Chemistry — virtual laboratory scientific scope, v8
+
+Sources:
+Williams College, Qualitative Analysis of Metal Ions in Solution:
+https://web.williams.edu/wp-etc/chemistry/epeacock/EPL_CHEM_153/153-LABMAN_PDF_05/2-3-qualanalysis.pdf
+BBC Bitesize, Practical identifying ions in unknown salts:
+https://www.bbc.co.uk/bitesize/guides/z6dtgwx/revision/5
+Wikibooks, Chemical Laboratory Techniques / Qualitative analysis:
+https://en.wikibooks.org/wiki/Applied_Science_BTEC_Nationals/Chemical_Laboratory_Techniques/Qualitative_analysis
+OpenStax Chemistry 2e, Classifying Chemical Reactions (LibreTexts):
+https://chem.libretexts.org/Bookshelves/General_Chemistry/Chemistry_2e_(OpenStax)/04%3A_Stoichiometry_of_Chemical_Reactions/4.02%3A_Classifying_Chemical_Reactions
+
+The catalog covers 11 explicitly defined reaction pairs. All stock solutions are 0.100 mol/L. Amounts in mmol = volume in mL × concentration in mol/L. Theoretical precipitate mass in mg = amount in mmol × molar mass in g/mol. The model assumes complete stoichiometric conversion and neglects Ksp, activity, kinetics, solubility, dissolved CO2 and contamination. It is an educational approximation, not guaranteed laboratory prediction.
+
+For zinc and aluminium hydroxides, additional OH dissolves precipitate according to the written hydroxo-complex stoichiometry. Zinc requires 2 additional OH per Zn; aluminium 1 per Al. Kinetic order and transient local pH are not modeled.
+
+Carbonate with insufficient acid is explicitly unsupported because bicarbonate formation and gas partitioning need an equilibrium model. Unknown pairs are not labeled as no-reaction.
+
+pH is computed only for HCl/NaOH, ideal strong acid/base, at 25 °C with pKw=14. Indicator visualization is phenolphthalein: transition approximately pH 8.2–10.0. No pH is invented for salt solutions.
+
+Theoretical CO2 gas volume = mmol × 24.47 mL at 25 °C and 1 atm using an ideal gas model, not a measured collected volume.
+
+Colors, transparency, particle size, gas bubbles, settling and pouring animation are schematic. Iron(II) oxidation, AgCl photochemistry, heating, temperature change and other subsequent reactions are not simulated. Filtration separates the modeled precipitate only; it does not change calculated chemistry. No chemical is safe to handle merely because it is shown here. Physical experiments require trained supervision and proper safety assessment.
+
+Models: Original authored glassware of revolution, textured bench, stock bottles and filter visualization. CC0 model searches were blocked; no external models were included. Three.js is reused from periodic/vendor/ under its bundled MIT license. No runtime third-party 3D assets are fetched.

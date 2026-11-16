@@ -4,6 +4,7 @@ const sidebar = document.querySelector('.sidebar');
 const toggle = document.querySelector('[data-sidebar-toggle]');
 const links = document.querySelectorAll('.side-nav a');
 const periodicPage = !!document.querySelector('#periodic-panel');
+const labPage = !!document.querySelector('#lab-panel');
 const title = document.querySelector('#section-title');
 const $ = s => document.querySelector(s);
 let user = null;
@@ -14,7 +15,7 @@ $('.scrim').addEventListener('click', () => setSidebar(false));
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setSidebar(false); });
 function route() {
   const id = (location.hash || '#main').slice(1);
-  const link = [...links].find(l => periodicPage ? l.pathname.endsWith('/periodic.html') : l.hash === '#' + id) || links[0];
+  const link = [...links].find(l => labPage ? l.pathname.endsWith('/lab.html') : periodicPage ? l.pathname.endsWith('/periodic.html') : l.hash === '#' + id) || links[0];
   links.forEach(l => { const on = l === link; l.classList.toggle('active', on); if (on) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current'); });
   title.textContent = link.dataset.title;
   for (const [panel, hash] of [['#profile-panel', '#profile'], ['#home-panel', '#main'], ['#courses-panel', '#courses']]) { const el = $(panel); if (el) el.hidden = !user || link.hash !== hash; }
