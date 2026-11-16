@@ -1,0 +1,6 @@
+Element properties: PubChem, US National Library of Medicine
+https://pubchem.ncbi.nlm.nih.gov/rest/pug/periodictable/CSV
+https://pubchem.ncbi.nlm.nih.gov/periodic-table/
+Access method: https://iupac.github.io/WFChemCookbook/datasources/pubchem_ptable.html
+Retrieved: 2026-11-16 UTC
+Arabic names and grid positions added locally. Temperatures in K, density in g/cm³, radius in pm, ionization/affinity in eV, electronegativity on Pauling scale. Missing values are not invented. Predicted states/configurations marked. AtomicWeight is the source value, not a rounded mass number. Lanthanides/actinides shown as detached series; group assignment is not asserted.

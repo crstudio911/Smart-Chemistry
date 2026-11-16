@@ -3,6 +3,7 @@ if (!token) location.replace('../login/login.html');
 const sidebar = document.querySelector('.sidebar');
 const toggle = document.querySelector('[data-sidebar-toggle]');
 const links = document.querySelectorAll('.side-nav a');
+const periodicPage = !!document.querySelector('#periodic-panel');
 const title = document.querySelector('#section-title');
 const $ = s => document.querySelector(s);
 let user = null;
@@ -13,10 +14,10 @@ $('.scrim').addEventListener('click', () => setSidebar(false));
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setSidebar(false); });
 function route() {
   const id = (location.hash || '#main').slice(1);
-  const link = [...links].find(l => l.hash === '#' + id) || links[0];
+  const link = [...links].find(l => periodicPage ? l.pathname.endsWith('/periodic.html') : l.hash === '#' + id) || links[0];
   links.forEach(l => { const on = l === link; l.classList.toggle('active', on); if (on) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current'); });
   title.textContent = link.dataset.title;
-  $('#profile-panel').hidden = !user || link.hash !== '#profile';
+  for (const [panel, hash] of [['#profile-panel', '#profile'], ['#home-panel', '#main'], ['#courses-panel', '#courses']]) { const el = $(panel); if (el) el.hidden = !user || link.hash !== hash; }
   setSidebar(false);
 }
 window.addEventListener('hashchange', route);
@@ -34,20 +35,23 @@ function showUser(data) {
   const photo = user.photo && /^https:\/\/i\.ibb\.co\//.test(user.photo) ? user.photo : '';
   for (const id of ['#user-photo', '#profile-photo']) {
     const img = $(id);
+    if (!img) continue;
     img.hidden = !photo;
-    if (photo) { img.src = photo; img.onerror = () => { img.hidden = true; $('#profile-placeholder').hidden = false; }; }
+    if (photo) { img.src = photo; img.onerror = () => { img.hidden = true; if ($('#profile-placeholder')) $('#profile-placeholder').hidden = false; }; }
   }
-  $('#profile-placeholder').hidden = !!photo;
-  for (const [id, value] of [['name', user.name], ['student', user.studentPhone], ['grade', user.grade], ['gender', user.gender]]) $('#profile-' + id).textContent = value || '—';
+  if ($('#profile-placeholder')) $('#profile-placeholder').hidden = !!photo;
+  for (const [id, value] of [['name', user.name], ['student', user.studentPhone], ['grade', user.grade], ['gender', user.gender]]) { const el = $('#profile-' + id); if (el) el.textContent = value || '—'; }
   const date = user.createdAt ? new Date(user.createdAt) : null;
-  $('#profile-created').textContent = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+  if ($('#profile-created')) $('#profile-created').textContent = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+  if ($('#welcome-name')) $('#welcome-name').textContent = user.name.split(' ')[0];
+  if ($('#home-grade')) $('#home-grade').textContent = user.grade;
   resetProfile();
   document.body.classList.remove('pending');
   route();
 }
 function resetProfile() {
-  if (!user) return;
-  $('#profile-parent').value = user.parentPhone || '';
+  if (!user || !$('#profile-form')) return;
+  $('#profile-parent').textContent = user.parentPhone || '—';
   $('#profile-email').value = user.email || '';
   document.querySelectorAll('#profile-form .error').forEach(el => { el.textContent = ''; });
   document.querySelectorAll('#profile-form input').forEach(el => el.removeAttribute('aria-invalid'));
@@ -68,24 +72,22 @@ async function loadUser() {
   showUser(r.user);
 }
 $('#user-retry').addEventListener('click', loadUser);
-$('#profile-parent').addEventListener('input', e => { e.target.value = Rules.digits(e.target.value).slice(0, 11); });
-$('#profile-cancel').addEventListener('click', () => { resetProfile(); feedback($('#profile-feedback'), 'تم إلغاء التغييرات غير المحفوظة.', 'info'); });
+$('#profile-cancel')?.addEventListener('click', () => { resetProfile(); feedback($('#profile-feedback'), 'تم إلغاء التغييرات غير المحفوظة.', 'info'); });
 function fieldError(input, text) { input.setAttribute('aria-invalid', String(!!text)); input.closest('.field').querySelector('.error').textContent = text; return !text; }
-$('#profile-form').addEventListener('submit', async e => {
+$('#profile-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   if (!user) return;
-  const parent = $('#profile-parent'), email = $('#profile-email'), box = $('#profile-feedback');
+  const email = $('#profile-email'), box = $('#profile-feedback');
   email.value = email.value.trim().toLowerCase();
   feedback(box, '');
-  const a = fieldError(parent, !Rules.phone(parent.value) ? 'اكتب رقم ولي أمر صحيح من 11 رقم.' : parent.value === user.studentPhone ? App.message('parent_same') : '');
   const b = fieldError(email, Rules.email(email.value) ? '' : 'استخدم بريد Gmail أو Yahoo أو Hotmail أو Outlook أو iCloud.');
-  if (!a || !b) return;
-  if (parent.value === user.parentPhone && email.value === (user.email || '')) { feedback(box, 'مفيش تغييرات جديدة للحفظ.', 'info'); return; }
+  if (!b) return;
+  if (email.value === (user.email || '')) { feedback(box, 'مفيش تغييرات جديدة للحفظ.', 'info'); return; }
   const btn = $('#profile-save');
   const controls = [...document.querySelectorAll('#profile-form input, #profile-cancel')];
   App.busy(btn, true);
   controls.forEach(el => { el.disabled = true; });
-  const r = await App.api('profile', { token, parentPhone: parent.value, email: email.value });
+  const r = await App.api('profile', { token, email: email.value });
   App.busy(btn, false);
   controls.forEach(el => { el.disabled = false; });
   if (expired(r.code)) return;
