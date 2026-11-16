@@ -31,10 +31,11 @@ const App = (() => {
     network: 'تعذر الاتصال بالخادم. تأكد من الإنترنت وحاول تاني.',
     invalid: 'رقم الهاتف أو كلمة المرور غير صحيحة.',
     locked: 'محاولات كتير غلط. استنى ربع ساعة وحاول تاني.',
-    wait: 'حسابك تحت المراجعة. هيتفعل أول ما تتم الموافقة عليه.',
-    ban: 'تم حظر هذا الحساب.',
+    wait: 'حسابك تحت المراجعة ولم يتم تفعيله بعد. بياناتك وصلت للإدارة؛ تقدر تسجّل الدخول بعد الموافقة على حسابك.',
+    ban: 'حسابك موقوف بواسطة الإدارة. مش هتقدر تسجّل الدخول لحد ما يتم رفع الإيقاف.',
     exists: 'رقم الطالب ده مسجل قبل كده.',
     email_exists: 'البريد الإلكتروني ده مستخدم في حساب تاني.',
+    parent_same: 'رقم ولي الأمر لازم يكون مختلف عن رقم الطالب.',
     validation: 'في بيانات مش صحيحة. راجع الخطوات وحاول تاني.',
     upload: 'تعذر رفع الصورة. حاول تاني.',
     session: 'انتهت الجلسة. سجل دخولك تاني.',
@@ -46,14 +47,19 @@ const App = (() => {
       res = await fetch(window.APP_CONFIG.api, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ...payload })
+        body: JSON.stringify({ action, ...payload }),
+        signal: AbortSignal.timeout(45000)
       });
     } catch { return { ok: false, code: 'network' }; }
-    try { return await res.json(); } catch { return { ok: false, code: 'server' }; }
+    try {
+      const data = await res.json();
+      return data && typeof data.ok === 'boolean' ? data : { ok: false, code: 'server' };
+    } catch { return { ok: false, code: 'server' }; }
   }
   const message = code => messages[code] || messages.server;
   return {
     initTheme, api, message,
+    busy(btn, on) { btn.disabled = on; btn.classList.toggle('loading', on); btn.setAttribute('aria-busy', String(on)); },
     token: () => store.get(TOKEN_KEY),
     setToken: t => store.set(TOKEN_KEY, t),
     clearToken: () => store.del(TOKEN_KEY)

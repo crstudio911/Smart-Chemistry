@@ -3,6 +3,8 @@ const $ = s => document.querySelector(s);
 const tabs = document.querySelectorAll('[data-tab]');
 const panels = { login: $('#login-panel'), register: $('#register-panel') };
 function showTab(name) {
+  $('#auth-title').textContent = name === 'login' ? 'أهلًا برجوعك' : 'بداية جديدة مع البروف';
+  $('#auth-subtitle').textContent = name === 'login' ? 'خطوتك الجاية تبدأ من هنا.' : 'خلّينا نتعرف عليك.';
   tabs.forEach(t => { const on = t.dataset.tab === name; t.classList.toggle('active', on); t.setAttribute('aria-selected', String(on)); });
   Object.entries(panels).forEach(([k, p]) => { p.hidden = k !== name; });
 }
@@ -15,7 +17,7 @@ function setError(input, text) {
   return !text;
 }
 function alertBox(el, text, type = 'error') { el.textContent = text; el.dataset.type = type; el.hidden = !text; }
-function busy(btn, on) { btn.disabled = on; btn.classList.toggle('loading', on); }
+function busy(btn, on) { App.busy(btn, on); tabs.forEach(t => { t.disabled = on; }); $('#step-back').disabled = on; $('#step-next').disabled = on; }
 document.querySelectorAll('[data-phone]').forEach(i => i.addEventListener('input', () => { i.value = Rules.digits(i.value).slice(0, 11); }));
 document.querySelectorAll('[data-reveal]').forEach(b => b.addEventListener('click', () => {
   const input = b.parentElement.querySelector('input');
@@ -36,7 +38,7 @@ loginForm.addEventListener('submit', async e => {
   busy(btn, true);
   const r = await App.api('login', { phone: phone.value, password: pass.value });
   busy(btn, false);
-  if (r.ok && r.token) { App.setToken(r.token); location.replace('../main/main.html'); return; }
+  if (r.ok && r.token) { App.setToken(r.token); alertBox(box, 'تم تسجيل الدخول بنجاح. جاري فتح حسابك…', 'success'); App.busy(btn, true); location.replace('../main/main.html'); return; }
   alertBox(box, App.message(r.code), r.code === 'wait' ? 'info' : 'error');
 });
 const steps = [...document.querySelectorAll('.step')];
@@ -129,6 +131,7 @@ $('#reg-photo').addEventListener('change', async e => {
   const file = e.target.files?.[0];
   const err = $('#photo-error');
   photoData = '';
+  $('#photo-feedback').textContent = '';
   $('#photo-preview').hidden = true;
   if (!file) return;
   if (!/^image\/(jpeg|png|webp)$/.test(file.type) || file.size > 10 * 1024 * 1024) { err.textContent = 'ارفع صورة JPG أو PNG أو WEBP أقل من 10 ميجا.'; return; }
@@ -137,6 +140,7 @@ $('#reg-photo').addEventListener('change', async e => {
     $('#photo-preview img').src = photoData;
     $('#photo-preview').hidden = false;
     err.textContent = '';
+    $('#photo-feedback').textContent = 'الصورة جاهزة للتسجيل.';
   } catch { err.textContent = 'تعذر قراءة الصورة. جرّب صورة تانية.'; }
 });
 document.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => document.getElementById(b.dataset.open)?.showModal()));
@@ -169,11 +173,13 @@ $('#register-form').addEventListener('submit', async e => {
     $('#photo-preview').hidden = true;
     goStep(0);
     showTab('login');
-    alertBox($('#login-alert'), 'تم إنشاء حسابك بنجاح. حسابك دلوقتي تحت المراجعة.', 'success');
+    alertBox($('#login-alert'), 'تم إنشاء حسابك بنجاح. حسابك تحت المراجعة ولم يتم تفعيله بعد؛ سجّل الدخول بعد موافقة الإدارة.', 'success');
     return;
   }
   if (r.code === 'exists') goStep(1);
   alertBox(box, App.message(r.code));
 });
 goStep(0);
+const notice = new URLSearchParams(location.search).get('notice');
+if (notice) alertBox($('#login-alert'), notice === 'logout' ? 'تم تسجيل الخروج بنجاح.' : App.message(notice), notice === 'logout' ? 'success' : notice === 'wait' ? 'info' : 'error');
 if (location.hash === '#register') showTab('register');
