@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark light"><meta name="referrer" content="no-referrer"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Inter:wght@500;600;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="../one.css"><link rel="stylesheet" href="login.css"><link rel="icon" href="../img/logo.png">
+<title>تسجيل الدخول</title>
+<meta name="description" content="سجّل دخولك أو أنشئ حسابك في Smart Chemistry مع مستر إسلام — البروف.">
+</head>
+<body class="auth-page">
+<svg class="symbols" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs><symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></symbol><symbol id="moon" viewBox="0 0 24 24"><path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/></symbol><symbol id="eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="eye-off" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7a9.8 9.8 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></symbol><symbol id="arrow-l" viewBox="0 0 24 24"><path d="M19 12H5m6-6-6 6 6 6"/></symbol><symbol id="arrow-r" viewBox="0 0 24 24"><path d="M5 12h14m-6-6 6 6-6 6"/></symbol><symbol id="check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol><symbol id="upload" viewBox="0 0 24 24"><path d="M12 16V4m-5 5 5-5 5 5M4 20h16"/></symbol><symbol id="shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6Z"/><path d="m9 12 2 2 4-4"/></symbol><symbol id="home" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7M5 10v10h14V10"/></symbol><symbol id="book" viewBox="0 0 24 24"><path d="M12 5c-3-2-7-2-10-1v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-3-1-7-1-10 1Zm0 0v15"/></symbol><symbol id="user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol><symbol id="logout" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></symbol><symbol id="menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol><symbol id="close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol></defs></svg>
+<main class="auth">
+<div class="auth-top"><a href="../index.html" aria-label="Smart Chemistry"><img src="../img/logo.png" alt="شعار Smart Chemistry" width="44" height="50"></a><button class="icon-btn" type="button" data-theme-toggle aria-label="تفعيل الوضع الفاتح"><svg class="icon" aria-hidden="true"><use href="#sun"/></svg></button></div>
+<section class="card">
+<h1>Smart Chemistry</h1>
+<p class="sub">الكيمياء مع البروف — مستر إسلام</p>
+<div class="tabs" role="tablist"><button type="button" role="tab" class="active" aria-selected="true" data-tab="login">تسجيل الدخول</button><button type="button" role="tab" aria-selected="false" data-tab="register">إنشاء حساب</button></div>
+<div id="login-panel">
+<form id="login-form" novalidate>
+<div class="field"><label for="login-phone">رقم الطالب</label><input id="login-phone" data-phone inputmode="numeric" autocomplete="tel" dir="ltr" maxlength="11" placeholder="01xxxxxxxxx"><span class="error" aria-live="polite"></span></div>
+<div class="field"><label for="login-password">كلمة المرور</label><div class="pass"><input id="login-password" type="password" autocomplete="current-password" dir="ltr" maxlength="64"><button type="button" class="icon-btn ghost" data-reveal aria-label="إظهار كلمة المرور"><svg class="icon" aria-hidden="true"><use href="#eye"/></svg></button></div><span class="error" aria-live="polite"></span></div>
+<p class="alert" id="login-alert" role="alert" hidden></p>
+<button class="btn primary full" type="submit">تسجيل الدخول<svg class="icon" aria-hidden="true"><use href="#arrow-l"/></svg></button>
+</form>
+</div>
+<div id="register-panel" hidden>
+<ol class="stepper" aria-label="خطوات إنشاء الحساب"><li><span>1</span>البيانات</li><li><span>2</span>الأرقام</li><li><span>3</span>الدراسة</li><li><span>4</span>الهوية</li><li><span>5</span>التأكيد</li></ol>
+<form id="register-form" novalidate>
+<fieldset class="step"><legend>البيانات الأساسية</legend>
+<div class="field"><label for="reg-name">الاسم</label><input id="reg-name" autocomplete="name" maxlength="60" placeholder="مثال: محمد عبد الله"><span class="hint">كلمتين أو أكتر، عربي أو إنجليزي.</span><span class="error" aria-live="polite"></span></div>
+<div class="field"><label for="reg-password">كلمة المرور</label><div class="pass"><input id="reg-password" type="password" autocomplete="new-password" dir="ltr" maxlength="64"><button type="button" class="icon-btn ghost" data-reveal aria-label="إظهار كلمة المرور"><svg class="icon" aria-hidden="true"><use href="#eye"/></svg></button></div><span class="hint">6 أحرف على الأقل، إنجليزي وأرقام ورموز.</span><span class="error" aria-live="polite"></span></div>
+<div class="field"><label for="reg-confirm">تأكيد كلمة المرور</label><div class="pass"><input id="reg-confirm" type="password" autocomplete="new-password" dir="ltr" maxlength="64"><button type="button" class="icon-btn ghost" data-reveal aria-label="إظهار كلمة المرور"><svg class="icon" aria-hidden="true"><use href="#eye"/></svg></button></div><span class="error" aria-live="polite"></span></div>
+</fieldset>
+<fieldset class="step" hidden><legend>أرقام التواصل</legend>
+<div class="field"><label for="reg-student">رقم الطالب</label><input id="reg-student" data-phone inputmode="numeric" autocomplete="tel" dir="ltr" maxlength="11" placeholder="01xxxxxxxxx"><span class="error" aria-live="polite"></span></div>
+<div class="field"><label for="reg-parent">رقم ولي الأمر</label><input id="reg-parent" data-phone inputmode="numeric" dir="ltr" maxlength="11" placeholder="01xxxxxxxxx"><span class="error" aria-live="polite"></span></div>
+</fieldset>
+<fieldset class="step" hidden><legend>البيانات الدراسية</legend>
+<div class="field"><span class="label">النوع</span><div class="choices"><label class="choice"><input type="radio" name="gender" value="ذكر"><span>ذكر</span></label><label class="choice"><input type="radio" name="gender" value="أنثى"><span>أنثى</span></label></div><span class="error" id="gender-error" aria-live="polite"></span></div>
+<div class="field"><label for="reg-grade">السنة الدراسية</label><select id="reg-grade"></select><span class="error" aria-live="polite"></span></div>
+<p class="alert" id="grade-alert" role="alert" hidden></p>
+<button type="button" class="btn outline" id="grade-retry" hidden>إعادة المحاولة</button>
+</fieldset>
+<fieldset class="step" hidden><legend>تأكيد الهوية</legend>
+<label class="upload" for="reg-photo"><svg class="icon" aria-hidden="true"><use href="#upload"/></svg><span>ارفع صورة شخصية واضحة ليك</span><small>JPG أو PNG أو WEBP</small></label>
+<input id="reg-photo" class="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp">
+<div id="photo-preview" class="preview" hidden><img alt="معاينة الصورة الشخصية"></div>
+<span class="error" id="photo-error" aria-live="polite"></span>
+</fieldset>
+<fieldset class="step" hidden><legend>الخطوة الأخيرة</legend>
+<div class="secure"><div class="secure-head"><svg class="icon" aria-hidden="true"><use href="#shield"/></svg><strong>إجراء أمان</strong><span class="tag">اختياري</span></div>
+<div class="field"><label for="reg-email">البريد الإلكتروني</label><input id="reg-email" type="email" autocomplete="email" dir="ltr" maxlength="100" placeholder="name@gmail.com"><span class="hint">Gmail أو Yahoo أو Hotmail أو Outlook أو iCloud فقط.</span><span class="error" aria-live="polite"></span></div></div>
+<label class="check"><input type="checkbox" id="reg-terms"><span>أوافق على <button type="button" class="link" data-open="terms">شروط الاستخدام</button> و<button type="button" class="link" data-open="privacy">سياسة الخصوصية</button></span></label>
+<span class="error" id="terms-error" aria-live="polite"></span>
+</fieldset>
+<p class="alert" id="register-alert" role="alert" hidden></p>
+<div class="step-actions"><button type="button" class="btn outline" id="step-back" hidden><svg class="icon" aria-hidden="true"><use href="#arrow-r"/></svg>السابق</button><button type="button" class="btn primary" id="step-next">التالي<svg class="icon" aria-hidden="true"><use href="#arrow-l"/></svg></button><button type="submit" class="btn primary" id="register-submit" hidden>إنشاء حساب<svg class="icon" aria-hidden="true"><use href="#check"/></svg></button></div>
+</form>
+</div>
+</section>
+</main>
+<dialog id="terms" aria-labelledby="terms-title"><div class="dialog-head"><h2 id="terms-title">شروط الاستخدام</h2><button type="button" class="icon-btn ghost" data-close aria-label="إغلاق"><svg class="icon" aria-hidden="true"><use href="#close"/></svg></button></div><div class="dialog-body"><p>الحساب شخصي ولا يجوز مشاركته مع أي حد.</p><p>البيانات المسجلة لازم تكون صحيحة وتخصك أنت.</p><p>المحتوى التعليمي للاستخدام الشخصي فقط، وممنوع نسخه أو نشره.</p><p>الإدارة من حقها مراجعة الحساب أو إيقافه لو حصلت مخالفة.</p></div><button type="button" class="btn primary" data-close>تمام</button></dialog>
+<dialog id="privacy" aria-labelledby="privacy-title"><div class="dialog-head"><h2 id="privacy-title">سياسة الخصوصية</h2><button type="button" class="icon-btn ghost" data-close aria-label="إغلاق"><svg class="icon" aria-hidden="true"><use href="#close"/></svg></button></div><div class="dialog-body"><p>بنجمع اسمك وأرقام التواصل وسنتك الدراسية وصورتك علشان نأكد هويتك ونجهز حسابك.</p><p>كلمة المرور بتتحفظ بشكل مشفّر ومحدش يقدر يشوفها.</p><p>بياناتك مش بتتشارك مع أي جهة خارجية.</p></div><button type="button" class="btn primary" data-close>تمام</button></dialog>
+<script src="../one.js"></script><script src="login.js"></script>
+</body>
+</html>
