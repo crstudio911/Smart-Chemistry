@@ -1,4 +1,15 @@
-Smart Chemistry — virtual laboratory scientific scope, v8
+Smart Chemistry — virtual laboratory scientific scope, v9
+
+Guided qualitative catalog: 17 common anions, not every anion in chemistry and not a claim of covering an unspecified school syllabus. Chloride, bromide, iodide, carbonate, bicarbonate, sulfite, sulfide, thiosulfate, nitrite, sulfate, phosphate, nitrate, acetate, oxalate, chromate, fluoride and borate.
+Sources for qualitative identification:
+https://www.deanza.edu/chemistry/documents/1c/experiments/Experiment%20C5-%20Anions.pdf
+https://chem.pg.edu.pl/documents/175187/63062955/Qualitative%20analysis%20of%20group%204%20and%206%20anions
+https://chemistry.olympiad.ch/fileadmin/user_upload/Archiv/Public/Brain_Food/Chemistry/More/Teaching_Material/Ion_Sheet_for_qualitative_inorganic_analysis/SwissChO_Ion_Sheet_EN.pdf
+https://mcconline.org.in/download/lab_manual/67.pdf
+https://mountain-academy.com/Content/LessonsFiles/5fbd560d-ce41-4c0a-9fdb-922783ae23c1.pdf
+Guided steps assume separately prepared single-anion samples and the stated media. A new sample or gas detection medium may replace the visual contents of the same schematic vessel. No reaction quantities, kinetics, gas volumes, precipitate masses or pH are calculated. Ammonia concentration, acidification and warming are abstracted conditions, not operational instructions. Brown-ring nitrate requires exclusion of nitrite. Carbonate and bicarbonate gas tests are not distinguishable by limewater alone. Sulfite, oxalate and thiosulfate reducing tests are not individually selective. Fluoride calcium precipitation and acetate coloration require further separation or confirmation in mixtures. Borate paper reaction is an idealized rosocyanine complex representation, not the color of a solution. Iron acetate equation summarizes a complex equilibrium, not a unique aqueous species.
+Toxic gases, lead, Cr(VI), concentrated acid and fluoride acidification hazards are explicitly noted; never use smell to identify gases. Guided tests are virtual only.
+Wood texture: generated original bitmap in img/lab-wood.jpg, bundled locally. No external image requests are needed for the table.
 
 Sources:
 Williams College, Qualitative Analysis of Metal Ions in Solution:

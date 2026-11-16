@@ -3,6 +3,7 @@
   const catalog = window.LabCatalog;
   let selected = catalog.reagents[0];
   let additions = [], journal = [], filtered = false, pouring = false;
+  let mode='guided', progress=window.LabAnions.initial('chloride'), guidedBusy=false;
   const experiment = $('#experiment');
   catalog.reactions.forEach(r => { const o = document.createElement('option'); o.value=r.id; o.textContent=r.name; experiment.append(o); });
   function log(text) {
@@ -24,7 +25,7 @@
       const div=document.createElement('div'),name=document.createElement('strong'),formula=document.createElement('small');name.textContent=r.name;formula.textContent=r.formula;formula.dir='ltr';div.append(name,formula);b.append(div);b.addEventListener('click',()=>select(r.id));$('#reagents').append(b);
     });
   }
-  function update() {
+  function updateFree() {
     const result=window.LabChemistry.evaluate(additions);
     $('#bench-volume').textContent=`${result.volume} / 100 mL`;
     const known=result.status==='known';
@@ -42,6 +43,7 @@
     if(known) {$('#reaction-equation').textContent=result.reaction.equation;$('#ionic-equation').textContent=result.dissolved>0?result.reaction.dissolution:result.reaction.ionic;}
     $('#precipitate-reading').textContent=known?`${result.massMg.toFixed(1)} mg`:'—';$('#precipitate-label').textContent=known&&result.precipitate>0?result.reaction.product:'';
     $('#gas-reading').textContent=known?`${result.gasMl.toFixed(2)} mL`:'—';$('#ph-reading').textContent=result.ph===null?'—':result.ph.toFixed(2);
+    $('#lab-readings').hidden=false;
     $('#filter-action').disabled=!known||result.precipitate<1e-9||filtered||pouring;
     $('#stir').disabled=!result.volume||pouring;$('#indicator').disabled=!known||result.ph===null;
     $('#add-reagent').disabled=pouring||filtered||result.volume>=100;$('#reset-lab').disabled=pouring;
@@ -50,7 +52,30 @@
     window.dispatchEvent(new CustomEvent('lab-state',{detail:{...result,filtered,indicator:$('#indicator').checked}}));
     return result;
   }
-  function reset() { additions=[];filtered=false;$('#indicator').checked=false;$('#lab-feedback').hidden=true;log('تم تفريغ الكأس وتجهيزه لتجربة جديدة.');update(); }
+  function updateGuided() {
+    const r=window.LabAnions.result(progress);
+    const next=progress.completed===0?'ضع العينة على الطاولة':r.test.steps[progress.completed-1]?.action||'اكتملت التجربة';
+    $('#guided-next-label').textContent=next;$('#guided-next').disabled=guidedBusy||r.done;
+    $('#guided-restart').disabled=guidedBusy;$('#guided-test').disabled=guidedBusy;
+    $('#free-mode').disabled=guidedBusy;
+    $('#guided-name').textContent=r.test.name;$('#guided-formula').textContent=r.test.formula;$('#guided-count').textContent=`${progress.completed} / ${r.test.steps.length+1}`;
+    $('#result-title').textContent=r.done?'اكتملت الملاحظات · '+r.test.name:r.current?'ملاحظة الخطوة':'عينة '+r.test.name;
+    $('#result-observation').textContent=r.observation;
+    $('#reaction-equation').textContent=r.equation;$('#reaction-equation').hidden=!r.equation;$('#ionic-equation').hidden=true;
+    $('#lab-readings').hidden=true;$('#bench-volume').textContent=r.test.formula;
+    $('#result-foot').textContent='كشف نوعي لعينة منفردة؛ لا تُحسب كتلة الراسب أو حجم الغاز. التداخلات مذكورة مع كل اختبار.';
+    $('#filter-action').disabled=true;$('#stir').disabled=!r.volume||guidedBusy;$('#reset-lab').disabled=guidedBusy;
+    $('#lab-stage').dataset.reactionId=r.test.id;$('#lab-scene-description').textContent=r.observation;
+    window.dispatchEvent(new CustomEvent('lab-state',{detail:{...r,filtered:false,indicator:false}}));return r;
+  }
+  function update(){return mode==='guided'?updateGuided():updateFree();}
+  function changeMode(next){mode=next;$('#content').dataset.mode=mode;$('.reagent-shelf').hidden=mode==='guided';$('#guided-action').hidden=mode!=='guided';$('#guided-progress').hidden=mode!=='guided';$('#guided-test').closest('.field').hidden=mode!=='guided';$('#guided-mode').setAttribute('aria-pressed',String(mode==='guided'));$('#free-mode').setAttribute('aria-pressed',String(mode==='free'));$('#guided-mode').className='btn '+(mode==='guided'?'primary':'outline');$('#free-mode').className='btn '+(mode==='free'?'primary':'outline');$('#lab-readings').hidden=mode==='guided';update();}
+  window.LabAnions.tests.forEach(t=>{const option=document.createElement('option');option.value=t.id;option.textContent=t.name+' · '+t.formula;$('#guided-test').append(option);});
+  $('#guided-mode').addEventListener('click',()=>changeMode('guided'));$('#free-mode').addEventListener('click',()=>changeMode('free'));
+  $('#guided-test').addEventListener('change',()=>{progress=window.LabAnions.initial($('#guided-test').value);log('تجربة جديدة: '+window.LabAnions.result(progress).test.name);update();});
+  $('#guided-restart').addEventListener('click',()=>{progress=window.LabAnions.initial(progress.id);update();});
+  $('#guided-next').addEventListener('click',async()=>{if(guidedBusy)return;guidedBusy=true;update();if(window.LabScene)await window.LabScene.pour('clear');progress=window.LabAnions.advance(progress);guidedBusy=false;const r=update();log(r.current?r.current.action+' · '+r.observation:'وضعت عينة '+r.test.name+' على الطاولة.');});
+  function reset() { if(mode==='guided'){progress=window.LabAnions.initial(progress.id);update();return;} additions=[];filtered=false;$('#indicator').checked=false;$('#lab-feedback').hidden=true;log('تم تفريغ الكأس وتجهيزه لتجربة جديدة.');update(); }
   async function add() {
     const amount=Number($('#dose').value),check=window.LabChemistry.add(additions,selected.id,amount);
     if(!check.ok){$('#lab-feedback').textContent=check.error;$('#lab-feedback').hidden=false;return;}
@@ -73,10 +98,10 @@
   $('#indicator').addEventListener('change',()=>{log($('#indicator').checked?'أضفت دليل الفينولفثالين.':'ألغيت عرض الدليل.');update();});
   $('#lab-info-open').addEventListener('click',()=>$('#lab-info').showModal());$('#lab-info-close').addEventListener('click',()=>$('#lab-info').close());
   $('#export-lab').addEventListener('click',()=>{
-    const r=update();const text=['Smart Chemistry — سجل المعمل',new Date().toLocaleString('ar-EG'),...journal.map(j=>`${j.time} | ${j.text}`),$('#result-observation').textContent,r.reaction?.equation||'','النتائج النظرية:',$('#precipitate-reading').textContent,$('#gas-reading').textContent,'pH: '+$('#ph-reading').textContent,'محاكاة تعليمية تقريبية؛ ليست نتائج معملية مضمونة.'].join('\n');
+    const r=update();const readings=r.qualitative?['كشف نوعي؛ الكتلة وحجم الغاز وpH غير محسوبة.']:['النتائج النظرية:',$('#precipitate-reading').textContent,$('#gas-reading').textContent,'pH: '+$('#ph-reading').textContent];const text=['Smart Chemistry — سجل المعمل',new Date().toLocaleString('ar-EG'),...journal.map(j=>`${j.time} | ${j.text}`),$('#result-observation').textContent,r.equation||r.reaction?.equation||'',...readings,'محاكاة تعليمية تقريبية؛ ليست نتائج معملية مضمونة.'].join('\n');
     const url=URL.createObjectURL(new Blob(['\ufeff'+text],{type:'text/plain;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='Smart_Chemistry_Lab.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
   });
-  renderReagents();select(selected.id);$('#choose-first').disabled=true;$('#choose-second').disabled=true;update();
+  renderReagents();select(selected.id);$('#choose-first').disabled=true;$('#choose-second').disabled=true;changeMode('guided');
   window.addEventListener('lab-scene-ready',update);
-  if(['localhost','127.0.0.1'].includes(location.hostname)) window.LabDebug={getState:()=>({...update(),additions:[...additions],filtered}),reset,add:(id,volume)=>{select(id);$('#dose').value=volume;return add();}};
+  if(['localhost','127.0.0.1'].includes(location.hostname)) window.LabDebug={getState:()=>({...update(),mode,progress,additions:[...additions],filtered}),reset,add:(id,volume)=>{select(id);$('#dose').value=volume;return add();}};
 })();

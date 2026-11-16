@@ -1,7 +1,7 @@
 import * as THREE from '../periodic/vendor/three.module.min.js';
 const stage=document.querySelector('#lab-stage');
 const css=name=>getComputedStyle(document.documentElement).getPropertyValue('--lab-'+name).trim();
-let renderer,scene,camera,liquid,sediment,particles,beaker,bottle,stream,filterCake,filterGroup,stirRod,frame=0,last=0,clock=0,stirUntil=0,pourStart=0,pourResolve=null;
+let renderer,scene,camera,liquid,sediment,particles,beaker,bottle,stream,filterCake,filterGroup,stirRod,ring,frame=0,last=0,clock=0,stirUntil=0,pourStart=0,pourResolve=null;
 let state={volume:0,precipitate:0,status:'empty',filtered:false,gasMl:0,color:'clear',solutionColor:'clear',ph:null};
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const mat=(name,extra={})=>new THREE.MeshStandardMaterial({color:css(name),roughness:.45,...extra});
@@ -27,15 +27,16 @@ function init(){
   renderer.domElement.setAttribute('role','img');renderer.domElement.setAttribute('aria-label','طاولة معمل ثلاثية الأبعاد بكأس ومحلول وأدوات ترشيح');stage.prepend(renderer.domElement);
   scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(38,1,.1,80);
   scene.add(new THREE.HemisphereLight(css('white'),css('bench'),2.7));const key=new THREE.DirectionalLight(css('white'),3);key.position.set(-4,7,6);scene.add(key);const fill=new THREE.DirectionalLight(css('glass'),1.6);fill.position.set(6,4,-3);scene.add(fill);
-  const textureCanvas=document.createElement('canvas');textureCanvas.width=256;textureCanvas.height=256;const ctx=textureCanvas.getContext('2d');ctx.fillStyle=css('bench');ctx.fillRect(0,0,256,256);ctx.fillStyle=css('metal');for(let i=0;i<1800;i++){const x=(i*71)%256,y=(i*97)%256;ctx.globalAlpha=.11;ctx.fillRect(x,y,1,1);}ctx.globalAlpha=1;ctx.strokeStyle=css('white');ctx.lineWidth=2;ctx.strokeRect(0,0,256,256);const texture=new THREE.CanvasTexture(textureCanvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(8,5);
-  mesh(new THREE.BoxGeometry(13,.22,9),new THREE.MeshStandardMaterial({map:texture,roughness:.7}),scene,0,-.13,0);
+  const texture=new THREE.TextureLoader().load('../img/lab-wood.jpg',()=>{renderer.render(scene,camera);});texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(2,2);
+  mesh(new THREE.BoxGeometry(13,.34,9),new THREE.MeshStandardMaterial({map:texture,roughness:.7}),scene,0,-.19,0);
   mesh(new THREE.BoxGeometry(13,4,.1),mat('wall'),scene,0,1.8,-3.7);
-  const shelf=mesh(new THREE.BoxGeometry(9,.12,.8),mat('metal'),scene,0,1.6,-3.2);
+  const shelf=mesh(new THREE.BoxGeometry(9,.12,.8),mat('metal'),scene,0,.04,-2.6);
   ['NaOH','CuSO₄','HCl','AgNO₃','FeCl₃'].forEach((formula,i)=>{
-    const g=new THREE.Group();g.position.set(-3.4+i*1.65,1.67,-3.2);scene.add(g);cylinder(.28,.62,mat(i===1?'blue':i===4?'yellow':'glass',{transparent:true,opacity:.68}),g,0,.32,0);cylinder(.15,.18,mat('black'),g,0,.72,0);const tag=label(formula,.46,.27);tag.position.set(0,.34,.285);g.add(tag);
+    const g=new THREE.Group();g.position.set(-3.4+i*1.65,0,-2.6);scene.add(g);cylinder(.28,.62,mat(i===1?'blue':i===4?'yellow':'glass',{transparent:true,opacity:.68}),g,0,.32,0);cylinder(.15,.18,mat('black'),g,0,.72,0);const tag=label(formula,.46,.27);tag.position.set(0,.34,.285);g.add(tag);
   });
   beaker=glassware(scene,.8,1.9,0,.65);
   liquid=cylinder(.755,1,mat('clear',{transparent:true,opacity:.7,roughness:.1}),beaker,0,.2,0);liquid.visible=false;
+  ring=mesh(new THREE.TorusGeometry(.71,.025,8,48),mat('brown'),beaker,0,.6,0);ring.rotation.x=Math.PI/2;ring.visible=false;
   sediment=cylinder(.73,1,mat('white'),beaker,0,.1,0);sediment.visible=false;
   const shadow=mesh(new THREE.CircleGeometry(.99,48),new THREE.MeshBasicMaterial({color:css('ink'),transparent:true,opacity:.08,depthWrite:false}),scene,0,.007,.65);shadow.rotation.x=-Math.PI/2;
   particles=new THREE.InstancedMesh(new THREE.SphereGeometry(.025,8,6),mat('white'),140);particles.visible=false;beaker.add(particles);
@@ -58,9 +59,10 @@ function update(){
   liquid.visible=state.volume>0&&valid;liquid.scale.y=fill;liquid.position.y=fill/2+.045;
   const liquidColor=state.indicator&&state.ph!==null&&state.ph>=8.2?'pink':state.solutionColor;
   liquid.material.color.set(css(liquidColor||'clear'));
-  sediment.visible=valid&&state.precipitate>1e-9&&!state.filtered;sediment.scale.y=Math.max(.02,Math.min(.15,state.massMg/2500));sediment.position.y=.06+sediment.scale.y/2;sediment.material.color.set(css(state.color||'white'));
-  filterCake.visible=!!state.filtered&&state.precipitate>0;filterCake.material.color.set(css(state.color||'white'));
-  particles.visible=valid&&!state.filtered&&(state.precipitate>1e-9||state.gasMl>0);particles.material.color.set(css(state.gasMl>0?'white':state.color||'white'));
+  sediment.visible=valid&&state.precipitate>1e-9&&!state.filtered;sediment.scale.y=state.qualitative?.07:Math.max(.02,Math.min(.15,state.massMg/2500));sediment.position.y=.06+sediment.scale.y/2;sediment.material.color.set(css(state.color||'white'));
+  ring.visible=!!state.ring;ring.position.y=fill*.8;
+  filterCake.visible=(!!state.filtered&&state.precipitate>0)||!!state.paper;filterCake.material.color.set(css(state.color||'white'));
+  particles.visible=valid&&!state.filtered&&(state.precipitate>1e-9||(state.gasMl>0||state.gasActive));particles.material.color.set(css((state.gasMl>0||state.gasActive)?'white':state.color||'white'));
 }
 function start(){if(!frame){last=0;frame=requestAnimationFrame(tick);}}
 function tick(time){
@@ -70,8 +72,8 @@ function tick(time){
   const dummy=new THREE.Object3D();const fill=Math.max(.1,state.volume/100*1.6);
   for(let i=0;i<140;i++){
     const a=i*2.399+(stirring?clock*2:0),r=Math.sqrt((i+.5)/140)*.66;
-    let y=state.gasMl>0?((clock*.38+i/140)%1)*fill:stirring?((i*37%140)/140)*fill:Math.max(.05,((i*37%140)/140)*fill-clock*.045);
-    dummy.position.set(Math.cos(a)*r,y+.08,Math.sin(a)*r);dummy.scale.setScalar(state.gasMl>0?1:1.2);dummy.updateMatrix();particles.setMatrixAt(i,dummy.matrix);
+    let y=(state.gasMl>0||state.gasActive)?((clock*.38+i/140)%1)*fill:stirring?((i*37%140)/140)*fill:Math.max(.05,((i*37%140)/140)*fill-clock*.045);
+    dummy.position.set(Math.cos(a)*r,y+.08,Math.sin(a)*r);dummy.scale.setScalar((state.gasMl>0||state.gasActive)?1:1.2);dummy.updateMatrix();particles.setMatrixAt(i,dummy.matrix);
   }
   particles.instanceMatrix.needsUpdate=true;
   if(pouring){const progress=Math.min(1,(time-pourStart)/1400);bottle.position.set(-.48,2.7,.65);bottle.rotation.z=-Math.sin(progress*Math.PI)*1.1;stream.visible=progress>.25&&progress<.8;if(progress>=1){bottle.visible=false;stream.visible=false;const resolve=pourResolve;pourResolve=null;resolve();}}
