@@ -106,6 +106,16 @@ const App = (() => {
     fix_expired: 'انتهت مهلة التصحيح. سجّل دخولك تاني علشان تكمل.',
     photo_required: 'لازم ترفع صورة شخصية جديدة وواضحة.',
     no_email: 'مفيش بريد إلكتروني متسجل على الحساب ده.',
+    center: 'اختار السنتر والميعاد اللي بتحضر فيه، أو اختار أونلاين.',
+    locked_content: 'المحتوى ده مقفول. افتحه من صفحة الدورة بالمحفظة أو بكود.',
+    balance: 'رصيدك مش كفاية. اشحن المحفظة بكود.',
+    owned: 'المحتوى ده مفتوح ليك بالفعل.',
+    not_found: 'المحتوى ده مش متاح دلوقتي.',
+    code_invalid: 'الكود ده غلط أو اتوقف.',
+    code_expired: 'الكود ده انتهت صلاحيته.',
+    code_used: 'الكود ده اتستخدم قبل كده.',
+    code_mine: 'أنت استخدمت الكود ده قبل كده.',
+    redeem_locked: 'محاولات كتير غلط. استنى ساعة وجرّب تاني.',
     server: 'حصلت مشكلة في الخادم. حاول تاني بعد شوية.'
   };
   async function api(action, payload = {}) {
@@ -280,4 +290,35 @@ const Site = (() => {
   menu.addEventListener('click', () => menu.setAttribute('aria-expanded', String(nav.classList.toggle('open'))));
   nav.querySelectorAll('a').forEach(a => a.addEventListener('click', closeMenu));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenu(); });
+})();
+
+const Social = (() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const PATHS = {
+    facebook: ['M15 3h-3a4 4 0 0 0-4 4v3H5v4h3v7h4v-7h3l1-4h-4V7a1 1 0 0 1 1-1h3Z', 'فيسبوك'],
+    youtube: ['M3 8.5A3.5 3.5 0 0 1 6.5 5h11A3.5 3.5 0 0 1 21 8.5v7a3.5 3.5 0 0 1-3.5 3.5h-11A3.5 3.5 0 0 1 3 15.5ZM10 9v6l5-3Z', 'يوتيوب'],
+    instagram: ['M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4Zm5 5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm5.5-1.5h.01', 'إنستجرام'],
+    tiktok: ['M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5M14 3c.5 2.6 2.4 4.4 5 4.6', 'تيك توك'],
+    telegram: ['M21 4 3 11l6 2 2 6 3-4 5 4ZM9 13l9-6', 'تيليجرام'],
+    whatsapp: ['M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12Z', 'قناة واتساب']
+  };
+  function icon(name) { const s = document.createElementNS(NS, 'svg'); s.setAttribute('class', 'icon'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS(NS, 'path'); p.setAttribute('d', PATHS[name][0]); s.append(p); return s; }
+  function links(map) {
+    return Object.keys(PATHS).filter(k => typeof map[k] === 'string' && /^https:\/\//.test(map[k])).map(k => {
+      const a = document.createElement('a');
+      a.href = map[k]; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.className = 'social'; a.setAttribute('aria-label', PATHS[k][1]); a.title = PATHS[k][1];
+      a.append(icon(k));
+      return a;
+    });
+  }
+  return { links, label: k => (PATHS[k] || [])[1] || k, icon };
+})();
+(() => {
+  document.querySelectorAll('[data-year]').forEach(n => { n.textContent = String(new Date().getFullYear()); });
+  const boxes = document.querySelectorAll('[data-socials]');
+  if (!boxes.length) return;
+  Site.load().then(r => {
+    const map = (r && r.settings && r.settings.socials) || {};
+    boxes.forEach(b => { const list = Social.links(map); b.replaceChildren(...list); b.hidden = !list.length; });
+  });
 })();

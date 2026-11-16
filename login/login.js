@@ -57,6 +57,39 @@ const dots = [...document.querySelectorAll('.stepper li')];
 let current = 0;
 let photoData = '';
 let gradesLoaded = false;
+let centers = [];
+function fillCenters(prefix, gradeSel, keepCenter, keepSchedule) {
+  const cs = $('#' + prefix + '-center'), ss = $('#' + prefix + '-schedule');
+  cs.replaceChildren(new Option(centers.length ? 'اختار السنتر' : 'مفيش سناتر متاحة دلوقتي', ''), ...centers.map(c => new Option(c.address ? c.name + ' — ' + c.address : c.name, c.id)));
+  if (keepCenter && centers.some(c => c.id === keepCenter)) cs.value = keepCenter;
+  const fillSchedules = keep => {
+    const c = centers.find(x => x.id === cs.value);
+    const grade = $(gradeSel).value;
+    const list = c ? c.schedules.filter(x => !x.grade || x.grade === grade) : [];
+    ss.replaceChildren(new Option(!c ? 'اختار السنتر الأول' : list.length ? 'اختار الميعاد' : 'مفيش مواعيد لسنتك في السنتر ده', ''), ...list.map(x => new Option(x.label, x.id)));
+    if (keep && list.some(x => x.id === keep)) ss.value = keep;
+  };
+  fillSchedules(keepSchedule);
+  cs.onchange = () => fillSchedules('');
+  $(gradeSel).onchange = () => fillSchedules(ss.value);
+}
+function modeSync(name, box) {
+  const sync = () => { const m = document.querySelector('[name=' + name + ']:checked'); $(box).hidden = !m || m.value !== 'center'; };
+  document.querySelectorAll('[name=' + name + ']').forEach(r => r.addEventListener('change', sync));
+  return sync;
+}
+const regModeSync = modeSync('mode', '#center-fields');
+const fixModeSync = modeSync('fix-mode', '#fix-center-fields');
+function checkMode(name, prefix, errId) {
+  const m = document.querySelector('[name=' + name + ']:checked');
+  $('#' + errId).textContent = m ? '' : 'اختار أونلاين أو سنتر.';
+  if (!m) return null;
+  if (m.value === 'online') return { mode: 'online', center: '', schedule: '' };
+  const c = $('#' + prefix + '-center'), s = $('#' + prefix + '-schedule');
+  const a = setError(c, c.value ? '' : 'اختار السنتر اللي بتحضر فيه.');
+  const b = setError(s, s.value ? '' : 'اختار الميعاد.');
+  return a && b ? { mode: 'center', center: c.value, schedule: s.value } : null;
+}
 function goStep(i) {
   current = i;
   steps.forEach((s, n) => { s.hidden = n !== i; });
@@ -84,7 +117,12 @@ async function loadGrades() {
   }
   $('#grade-retry').hidden = true;
   gradesLoaded = true;
+  centers = Array.isArray(r.centers) ? r.centers : [];
   fillGrades(sel, r.grades, 'اختار سنتك الدراسية');
+  fillCenters('reg', '#reg-grade');
+  const centerChoice = document.querySelector('[name=mode][value=center]');
+  centerChoice.disabled = !centers.length;
+  centerChoice.closest('.choice').classList.toggle('off', !centers.length);
   if (!r.grades.length) alertBox(box, 'لا توجد سنوات دراسية متاحة حاليًا.');
 }
 $('#grade-retry').addEventListener('click', loadGrades);
@@ -111,7 +149,8 @@ const validators = [
     genderBox.textContent = gender ? '' : 'اختار النوع.';
     const g = $('#reg-grade');
     const b = setError(g, g.value ? '' : 'اختار سنتك الدراسية.');
-    return !!gender && b;
+    const m = checkMode('mode', 'reg', 'mode-error');
+    return !!gender && b && !!m;
   },
   () => { $('#photo-error').textContent = photoData ? '' : 'لازم ترفع صورة شخصية ليك.'; return !!photoData; },
   () => {
@@ -178,6 +217,7 @@ $('#register-form').addEventListener('submit', async e => {
     parentPhone: $('#reg-parent').value,
     gender: document.querySelector('[name=gender]:checked').value,
     grade: $('#reg-grade').value,
+    ...checkMode('mode', 'reg', 'mode-error'),
     email: $('#reg-email').value,
     photo: photoData.split(',')[1],
     agree: true
@@ -185,6 +225,7 @@ $('#register-form').addEventListener('submit', async e => {
   busy(btn, false);
   if (r.ok) {
     $('#register-form').reset();
+    regModeSync();
     photoData = '';
     $('#photo-preview').hidden = true;
     goStep(0);
@@ -193,6 +234,7 @@ $('#register-form').addEventListener('submit', async e => {
     return;
   }
   if (r.code === 'exists') goStep(1);
+  if (r.code === 'center') { goStep(2); gradesLoaded = false; loadGrades(); }
   if (r.code === 'birth') goStep(0);
   alertBox(box, App.message(r.code));
 });
@@ -342,7 +384,7 @@ $('#newpass-form').addEventListener('submit', async e => {
   alertBox($('#login-alert'), 'تم تغيير كلمة المرور بنجاح، والقديمة اتمسحت. سجّل دخولك بالكلمة الجديدة.', 'success');
   $('#login-password').focus();
 });
-const FIX_FIELDS = { name: '#fix-name', parent_missing: '#fix-parent', parent_wrong: '#fix-parent', birth: '#fix-birth', grade: '#fix-grade', gender: '#fix-gender-field', photo: '#fix-photo-field' };
+const FIX_FIELDS = { name: '#fix-name', parent_missing: '#fix-parent', parent_wrong: '#fix-parent', birth: '#fix-birth', grade: '#fix-grade', gender: '#fix-gender-field', photo: '#fix-photo-field', center: '#fix-mode-field' };
 const fixState = { token: '', codes: [], photo: '' };
 function openReject(r) {
   fixState.token = r.fix;
@@ -379,6 +421,10 @@ $('#fix-open').addEventListener('click', async () => {
   const r = await App.api('grades');
   const list = r.ok && Array.isArray(r.grades) ? r.grades : [];
   fillGrades(sel, d.grade && !list.includes(d.grade) ? [d.grade, ...list] : list, 'اختار سنتك الدراسية', d.grade);
+  centers = r.ok && Array.isArray(r.centers) ? r.centers : [];
+  document.querySelectorAll('[name=fix-mode]').forEach(i => { i.checked = i.value === (d.mode || 'online'); });
+  fillCenters('fix', '#fix-grade', d.center, d.schedule);
+  fixModeSync();
   ($('#fix-form .needs-fix input, #fix-form .needs-fix select') || $('#fix-name')).focus();
 });
 $('#fix-photo').addEventListener('change', async e => {
@@ -406,12 +452,13 @@ $('#fix-form').addEventListener('submit', async e => {
     setError(em, Rules.email(em.value) ? '' : 'استخدم بريد من Gmail أو Yahoo أو Hotmail أو Outlook أو iCloud.')
   ].every(Boolean);
   $('#fix-gender-error').textContent = gender ? '' : 'اختار النوع.';
+  const where = checkMode('fix-mode', 'fix', 'fix-mode-error');
   const photoOk = !fixState.codes.includes('photo') || !!fixState.photo;
   $('#fix-photo-error').textContent = photoOk ? '' : 'لازم ترفع صورة شخصية جديدة وواضحة.';
-  if (!ok || !gender || !photoOk) { ($('#fix-form [aria-invalid=true]') || $('#fix-form')).scrollIntoView({ block: 'center' }); return; }
+  if (!ok || !gender || !photoOk || !where) { ($('#fix-form [aria-invalid=true]') || $('#fix-form')).scrollIntoView({ block: 'center' }); return; }
   const btn = $('#fix-submit');
   App.busy(btn, true);
-  const r = await App.api('fix', { fix: fixState.token, name: n.value, birthDate: bd.value, parentPhone: g.value, gender: gender.value, grade: gr.value, email: em.value, photo: fixState.photo ? fixState.photo.split(',')[1] : '' });
+  const r = await App.api('fix', { fix: fixState.token, name: n.value, birthDate: bd.value, parentPhone: g.value, gender: gender.value, grade: gr.value, ...where, email: em.value, photo: fixState.photo ? fixState.photo.split(',')[1] : '' });
   App.busy(btn, false);
   if (r.ok) {
     fixState.token = ''; fixState.photo = '';

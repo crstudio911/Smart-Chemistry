@@ -12,19 +12,24 @@ const title = document.querySelector('#section-title');
 const $ = s => document.querySelector(s);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 const svg = name => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'icon'); s.setAttribute('aria-hidden', 'true'); const u = document.createElementNS('http://www.w3.org/2000/svg', 'use'); u.setAttribute('href', '#' + name); s.append(u); return s; };
-let user = null, owner = '', courses = [], coursesState = 'idle', notes = [], done = new Set(), editing = null, filter = 'all', scrollTo = '';
+let user = null, owner = '', courses = [], coursesState = 'idle', notes = [], done = new Set(), editing = null, filter = 'all', scrollTo = '', balance = 0, walletState = 'idle', viewKey = '';
+const Player = window.Player || null;
 function feedback(box, text, type = 'error') { if (!box) return; box.textContent = text; box.dataset.type = type; box.hidden = !text; }
 function setSidebar(open) { sidebar.classList.toggle('open', open); toggle.setAttribute('aria-expanded', String(open)); $('.scrim').hidden = !open; }
 toggle.addEventListener('click', () => setSidebar(!sidebar.classList.contains('open')));
 $('.scrim').addEventListener('click', () => setSidebar(false));
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setSidebar(false); });
+function parts() { return (location.hash || '#main').slice(1).split('/').map(x => decodeURIComponent(x)); }
 function route() {
-  const id = (location.hash || '#main').slice(1);
-  const link = [...links].find(l => labPage ? l.pathname.endsWith('/lab.html') : periodicPage ? l.pathname.endsWith('/periodic.html') : l.hash === '#' + id) || links[0];
+  const [id] = parts();
+  const section = id === 'course' || id === 'lecture' ? '#courses' : '#' + id;
+  const link = [...links].find(l => labPage ? l.pathname.endsWith('/lab.html') : periodicPage ? l.pathname.endsWith('/periodic.html') : l.hash === section && l.pathname === location.pathname) || links[0];
   links.forEach(l => { const on = l === link; l.classList.toggle('active', on); if (on) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current'); });
   title.textContent = link.dataset.title;
-  for (const [panel, hash] of [['#profile-panel', '#profile'], ['#home-panel', '#main'], ['#courses-panel', '#courses'], ['#notes-panel', '#notes']]) { const p = $(panel); if (p) p.hidden = !user || link.hash !== hash; }
+  for (const [panel, hash] of [['#profile-panel', '#profile'], ['#home-panel', '#main'], ['#courses-panel', '#courses'], ['#notes-panel', '#notes'], ['#wallet-panel', '#wallet']]) { const p = $(panel); if (p) p.hidden = !user || link.hash !== hash || (hash === '#courses' && id === 'lecture'); }
+  if ($('#lecture-panel')) $('#lecture-panel').hidden = !user || id !== 'lecture';
   setSidebar(false);
+  if (mainPage && user) renderView();
   if (scrollTo && link.hash === '#courses') { const target = document.getElementById(scrollTo); scrollTo = ''; if (target) requestAnimationFrame(() => target.scrollIntoView({ block: 'start' })); }
 }
 window.addEventListener('hashchange', route);
@@ -37,13 +42,24 @@ function expired(code) {
 const fmtDate = (v, opts) => { const d = v ? new Date(v) : null; return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('ar-EG', opts || { day: 'numeric', month: 'long', year: 'numeric' }) : '—'; };
 const fmtTime = v => new Date(v).toLocaleString('ar-EG', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 const localInput = iso => { const d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); };
-const lessonKey = (c, l) => owner + '|' + c.id + '|' + l;
-function courseStats(c) { const finished = c.lessons.filter(l => done.has(lessonKey(c, l))).length; return { finished, total: c.lessons.length, percent: c.lessons.length ? Math.round(finished * 100 / c.lessons.length) : 0 }; }
-function totals() {
+const itemKey = (l, it) => owner + '|' + l.id + '|' + it.id;
+function uniqueOpen(list) {
+  const seen = new Map();
+  list.forEach(c => c.lectures.forEach(l => { if (l.open && !seen.has(l.id)) seen.set(l.id, { c, l }); }));
+  return [...seen.values()];
+}
+function lectureStats(l) { const finished = l.items.filter(it => done.has(itemKey(l, it))).length; return { finished, total: l.items.length }; }
+function courseStats(c) {
   let finished = 0, total = 0;
-  courses.forEach(c => { const s = courseStats(c); finished += s.finished; total += s.total; });
+  c.lectures.forEach(l => { if (!l.open) return; const s = lectureStats(l); finished += s.finished; total += s.total; });
   return { finished, total, percent: total ? Math.round(finished * 100 / total) : 0 };
 }
+function totals() {
+  let finished = 0, total = 0;
+  uniqueOpen(courses).forEach(({ l }) => { const s = lectureStats(l); finished += s.finished; total += s.total; });
+  return { finished, total, percent: total ? Math.round(finished * 100 / total) : 0 };
+}
+const money = n => Number(n || 0).toLocaleString('ar-EG') + ' جنيه';
 const upcoming = () => notes.filter(n => n.remindAt && !n.done && !n.notified).sort((a, b) => Date.parse(a.remindAt) - Date.parse(b.remindAt));
 function bar(percent) { const b = el('div', 'bar'); b.setAttribute('role', 'progressbar'); b.setAttribute('aria-valuemin', '0'); b.setAttribute('aria-valuemax', '100'); b.setAttribute('aria-valuenow', String(percent)); const f = el('span'); f.style.setProperty('--p', percent); b.append(f); return b; }
 function showUser(data) {
@@ -60,6 +76,8 @@ function showUser(data) {
   if ($('#profile-placeholder')) $('#profile-placeholder').hidden = !!photo;
   for (const [id, value] of [['name', user.name], ['student', user.studentPhone], ['grade', user.grade], ['gender', user.gender]]) { const n = $('#profile-' + id); if (n) n.textContent = value || '—'; }
   if ($('#profile-created')) $('#profile-created').textContent = fmtDate(user.createdAt);
+  if ($('#profile-mode')) $('#profile-mode').textContent = user.mode === 'center' ? 'سنتر' : 'أونلاين';
+  if ($('#profile-center')) $('#profile-center').textContent = user.mode === 'center' ? [user.centerName, user.scheduleLabel].filter(Boolean).join(' · ') || '—' : 'مش تابع لسنتر';
   if ($('#profile-birth')) $('#profile-birth').textContent = user.birthDate ? fmtDate(user.birthDate + 'T00:00:00') : '—';
   if ($('#welcome-name')) $('#welcome-name').textContent = user.name.split(' ')[0];
   if ($('#home-grade')) $('#home-grade').textContent = user.grade;
@@ -80,7 +98,7 @@ async function loadLocal() {
   notes = (await DB.owned('notes', owner)) || [];
   done = new Set(((await DB.owned('progress', owner)) || []).map(p => p.key));
   const cached = await DB.get('kv', 'courses:' + owner);
-  if (cached && Array.isArray(cached.courses)) courses = cached.courses;
+  if (cached && Array.isArray(cached.courses)) courses = cached.courses.filter(c => c && Array.isArray(c.lectures));
 }
 async function loadCourses() {
   if (!mainPage) return;
@@ -90,7 +108,8 @@ async function loadCourses() {
   renderCourses();
   const r = await App.api('courses', { token });
   if (r.ok && Array.isArray(r.courses)) {
-    courses = r.courses.filter(c => c && typeof c.id === 'string' && Array.isArray(c.lessons));
+    courses = r.courses.filter(c => c && typeof c.id === 'string' && Array.isArray(c.lectures));
+    if (typeof r.balance === 'number') balance = r.balance;
     coursesState = 'ready';
     feedback($('#courses-feedback'), '');
     DB.put('kv', { at: new Date().toISOString(), courses }, 'courses:' + owner);
@@ -102,7 +121,12 @@ async function loadCourses() {
   }
   renderAll();
 }
-function renderAll() { renderHome(); renderCourses(); renderNoteCourses(); renderNotes(); }
+function renderAll() { renderHome(); renderCourses(); renderNoteCourses(); renderNotes(); renderView(); }
+function nextItem() {
+  for (const { c, l } of uniqueOpen(courses)) { const it = l.items.find(x => !done.has(itemKey(l, x))); if (it) return { c, l, it }; }
+  return null;
+}
+const lectureHref = (c, l, it) => '#lecture/' + encodeURIComponent(c.id) + '/' + encodeURIComponent(l.id) + (it ? '/' + encodeURIComponent(it.id) : '');
 function renderHome() {
   if (!mainPage || !user) return;
   const t = totals();
@@ -113,33 +137,38 @@ function renderHome() {
   $('#stat-courses').textContent = String(courses.length);
   $('#stat-reminders').textContent = String(upcoming().length);
   $('#stat-notes').textContent = String(notes.filter(n => !n.done).length);
-  $('#home-headline').textContent = !t.total ? 'دوراتك هتظهر هنا.' : t.percent === 100 ? 'خلّصت كل دروسك.' : t.finished ? `أنجزت ${t.percent}% من دوراتك.` : 'ابدأ أول درس النهارده.';
-  $('#home-sub').textContent = !t.total ? (coursesState === 'loading' ? 'جاري تحميل دورات سنتك…' : 'لسه مفيش دورات منشورة لسنتك الدراسية.') : t.percent === 100 ? 'راجع ملاحظاتك وخليك جاهز للامتحان.' : `فاضلك ${t.total - t.finished} درس، كمّل من مكان ما وقفت.`;
+  $('#home-headline').textContent = !t.total ? 'دوراتك هتظهر هنا.' : t.percent === 100 ? 'خلّصت كل محاضراتك.' : t.finished ? `أنجزت ${t.percent}% من محاضراتك.` : 'ابدأ أول محاضرة النهارده.';
+  $('#home-sub').textContent = !t.total ? (coursesState === 'loading' ? 'جاري تحميل دوراتك…' : 'لسه مفيش محاضرات مفتوحة ليك.') : t.percent === 100 ? 'راجع ملاحظاتك وخليك جاهز للامتحان.' : `فاضلك ${t.total - t.finished} من الفيديوهات والملفات، كمّل من مكان ما وقفت.`;
   const next = $('#home-next');
-  const target = courses.map(c => ({ c, l: c.lessons.find(l => !done.has(lessonKey(c, l))) })).find(x => x.l);
+  const target = nextItem();
   next.replaceChildren();
   if (target) {
-    const s = courseStats(target.c);
+    const s = lectureStats(target.l);
     const card = el('div', 'next-lesson');
-    card.append(el('span', 'profile-eyebrow', target.c.title), el('strong', '', target.l), bar(s.percent), el('small', 'muted', `${s.finished} من ${s.total} دروس في الدورة`));
+    card.append(el('span', 'profile-eyebrow', target.c.title + ' · ' + target.l.title), el('strong', '', target.it.title), bar(s.total ? Math.round(s.finished * 100 / s.total) : 0), el('small', 'muted', `${s.finished} من ${s.total} في المحاضرة`));
     const actions = el('div', 'next-actions');
-    const mark = el('button', 'btn primary small'); mark.type = 'button'; mark.append(svg('check'), 'خلصت الدرس ده');
-    mark.addEventListener('click', () => setLesson(target.c, target.l, true));
-    const open = el('a', 'btn outline small', 'افتح الدورة'); open.href = '#courses';
-    open.addEventListener('click', () => { scrollTo = 'course-' + target.c.id; });
-    actions.append(mark, open);
+    const open = el('a', 'btn primary small'); open.href = lectureHref(target.c, target.l, target.it); open.append(svg(target.it.kind === 'video' ? 'play' : 'file'), target.it.kind === 'video' ? 'كمّل الفيديو' : 'افتح الملف');
+    const all = el('a', 'btn outline small', 'افتح الدورة'); all.href = '#course/' + encodeURIComponent(target.c.id);
+    actions.append(open, all);
     card.append(actions);
     next.append(card);
-  } else next.append(el('p', 'empty', t.total ? 'مفيش دروس فاضلة. شغل عظيم!' : 'أول ما تتنشر دورة لسنتك، هتلاقي الدرس الجاي هنا.'));
+  } else next.append(el('p', 'empty', t.total ? 'مفيش حاجة فاضلة. شغل عظيم!' : 'أول ما تتفتح لك محاضرة، هتلاقي اللي جاي هنا.'));
   const rem = $('#home-reminders');
   const soon = upcoming().slice(0, 4);
-  rem.replaceChildren(...(soon.length ? soon.map(n => { const li = el('li'); li.append(svg('clock'), el('div', '', ''), ''); li.children[1].append(el('strong', '', n.title), el('small', '', fmtTime(n.remindAt))); return li; }) : [el('li', 'empty', 'مفيش تذكيرات جاية. حدد ميعاد لأي ملاحظة.')]));
+  rem.replaceChildren(...(soon.length ? soon.map(n => { const li = el('li'); const d = el('div'); d.append(el('strong', '', n.title), el('small', '', fmtTime(n.remindAt))); li.append(svg('clock'), d); return li; }) : [el('li', 'empty', 'مفيش تذكيرات جاية. حدد ميعاد لأي ملاحظة.')]));
   const recent = $('#home-notes');
   const latest = notes.filter(n => !n.done).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).slice(0, 3);
   recent.replaceChildren(...(latest.length ? latest.map(n => { const li = el('li'); const d = el('div'); d.append(el('strong', '', n.title), el('small', '', n.text ? n.text.slice(0, 90) : fmtDate(n.updatedAt))); li.append(svg('note'), d); return li; }) : [el('li', 'empty', 'لسه مكتبتش ملاحظات.')]));
   const list = $('#home-courses');
-  list.replaceChildren(...(courses.length ? courses.map(c => { const s = courseStats(c); const row = el('a', 'progress-row'); row.href = '#courses'; row.addEventListener('click', () => { scrollTo = 'course-' + c.id; }); const head = el('div', 'progress-head'); head.append(el('strong', '', c.title), el('b', '', s.percent + '%')); head.lastChild.dir = 'ltr'; row.append(head, bar(s.percent), el('small', 'muted', `${s.finished} من ${s.total} دروس`)); return row; }) : [el('p', 'empty', coursesState === 'loading' ? 'جاري التحميل…' : 'مفيش دورات لسنتك لحد دلوقتي.')]));
+  list.replaceChildren(...(courses.length ? courses.map(c => { const s = courseStats(c); const row = el('a', 'progress-row'); row.href = '#course/' + encodeURIComponent(c.id); const head = el('div', 'progress-head'); head.append(el('strong', '', c.title), el('b', '', s.percent + '%')); head.lastChild.dir = 'ltr'; row.append(head, bar(s.percent), el('small', 'muted', s.total ? `${s.finished} من ${s.total}` : 'لسه مفيش محتوى مفتوح')); return row; }) : [el('p', 'empty', coursesState === 'loading' ? 'جاري التحميل…' : 'مفيش دورات ليك لحد دلوقتي.')]));
 }
+function cover(c, cls) {
+  const box = el('div', cls);
+  if (c.image && /^https:\/\/i\.ibb\.co\//.test(c.image)) { const img = el('img'); img.src = c.image; img.alt = ''; img.loading = 'lazy'; img.onerror = () => { img.remove(); box.append(svg('book')); }; box.append(img); }
+  else box.append(svg('book'));
+  return box;
+}
+function badge(text, tone) { const b = el('span', 'badge', text); if (tone) b.dataset.tone = tone; return b; }
 function renderCourses() {
   if (!mainPage || !user) return;
   const t = totals();
@@ -147,37 +176,199 @@ function renderCourses() {
   const box = $('#courses-list');
   if (!courses.length) {
     if (coursesState === 'loading') { box.replaceChildren(); return; }
-    const empty = el('div', 'courses-empty'); empty.append(svg('book'), el('h3', '', 'لسه مفيش دورات'), el('p', '', 'أول ما مستر إسلام ينشر دورات لسنتك، هتظهر هنا.'));
+    const empty = el('div', 'courses-empty'); empty.append(svg('book'), el('h3', '', 'لسه مفيش دورات'), el('p', '', 'أول ما مستر إسلام ينشر دورات ليك، هتظهر هنا.'));
     box.replaceChildren(empty);
     return;
   }
   box.replaceChildren(...courses.map(c => {
     const s = courseStats(c);
-    const card = el('article', 'course-card'); card.id = 'course-' + c.id;
-    const head = el('header'); const info = el('div'); info.append(el('h3', '', c.title)); if (c.description) info.append(el('p', '', c.description));
-    const pct = el('b', 'course-percent', s.percent + '%'); pct.dir = 'ltr';
-    head.append(info, pct);
-    const list = el('ol', 'lessons');
-    c.lessons.forEach((l, i) => {
-      const li = el('li'); const label = el('label', 'lesson'); const box2 = el('input'); box2.type = 'checkbox'; box2.checked = done.has(lessonKey(c, l));
-      box2.addEventListener('change', () => setLesson(c, l, box2.checked));
-      const num = el('span', 'lesson-num', String(i + 1).padStart(2, '0')); num.dir = 'ltr';
-      label.append(box2, num, el('span', '', l)); li.append(label); if (box2.checked) li.classList.add('done'); list.append(li);
-    });
-    const foot = el('div', 'course-foot');
-    const add = el('button', 'btn outline small'); add.type = 'button'; add.append(svg('note'), 'أضف ملاحظة للدورة');
-    add.addEventListener('click', () => { location.hash = 'notes'; startNote(c.id); });
-    foot.append(el('small', 'muted', `${s.finished} من ${s.total} دروس`), add);
-    card.append(head, bar(s.percent), list, foot);
+    const card = el('a', 'course-card'); card.id = 'course-' + c.id; card.href = '#course/' + encodeURIComponent(c.id);
+    const body = el('div', 'course-body');
+    const tags = el('div', 'badges');
+    tags.append(c.free ? badge('مجانية', 'ok') : badge('مدفوعة', 'warn'), badge(c.lectures.length + ' محاضرة'));
+    if (c.owned) tags.append(badge('مشترك', 'ok'));
+    body.append(tags, el('h3', '', c.title));
+    if (c.description) body.append(el('p', '', c.description.length > 140 ? c.description.slice(0, 140) + '…' : c.description));
+    const foot = el('div', 'course-foot'); const pct = el('b', 'course-percent', s.percent + '%'); pct.dir = 'ltr';
+    foot.append(el('small', 'muted', s.total ? `${s.finished} من ${s.total} خلصتهم` : 'افتح الدورة وشوف المحاضرات'), pct);
+    body.append(bar(s.percent), foot);
+    card.append(cover(c, 'course-cover'), body);
     return card;
   }));
 }
-async function setLesson(c, l, on) {
-  const key = lessonKey(c, l);
-  if (on) { done.add(key); await DB.put('progress', { key, owner, course: c.id, lesson: l, at: new Date().toISOString() }); }
+function findCourse(id) { return courses.find(c => c.id === id); }
+function renderView() {
+  if (!mainPage || !user) return;
+  const [id, a, b, c] = parts();
+  const list = $('#courses-list'), view = $('#course-view');
+  if (id !== 'lecture' && Player) { Player.destroy(); viewKey = ''; }
+  if (id === 'course') { list.hidden = true; view.hidden = false; renderCourseView(a); }
+  else { list.hidden = false; view.hidden = true; }
+  if (id === 'lecture') renderLecture(a, b, c);
+  if (id === 'wallet') loadWallet();
+}
+function renderCourseView(id) {
+  const view = $('#course-view');
+  const c = findCourse(id);
+  if (!c) { view.replaceChildren(el('p', 'empty', coursesState === 'loading' ? 'جاري التحميل…' : 'الدورة دي مش متاحة ليك.')); return; }
+  title.textContent = c.title;
+  const back = el('a', 'btn outline small'); back.href = '#courses'; back.append(svg('arrow-r'), 'كل الدورات');
+  const head = el('header', 'course-hero');
+  const info = el('div');
+  const tags = el('div', 'badges'); tags.append(c.free ? badge('كل المحتوى مجاني', 'ok') : badge('دورة مدفوعة', 'warn'));
+  if (c.owned) tags.append(badge('مشترك في الدورة كاملة', 'ok'));
+  info.append(tags, el('h2', '', c.title));
+  if (c.description) info.append(el('p', '', c.description));
+  const s = courseStats(c);
+  info.append(bar(s.percent), el('small', 'muted', s.total ? `${s.finished} من ${s.total} خلصتهم` : 'لسه مفيش محتوى مفتوح'));
+  if (!c.free && c.price && !c.owned) {
+    const buyAll = buyButton('course', c, 'اشترك في الدورة كاملة بـ ' + money(c.price));
+    info.append(el('div', 'next-actions'));
+    info.lastChild.append(buyAll);
+  }
+  head.append(cover(c, 'course-cover big'), info);
+  const fb = el('p', 'alert'); fb.id = 'course-feedback'; fb.setAttribute('role', 'status'); fb.hidden = true;
+  const lectures = el('ol', 'lectures');
+  if (!c.lectures.length) lectures.append(el('li', 'empty', 'لسه مفيش محاضرات في الدورة دي.'));
+  c.lectures.forEach((l, i) => {
+    const li = el('li', 'lecture' + (l.open ? '' : ' locked'));
+    const num = el('span', 'lecture-num', String(i + 1).padStart(2, '0')); num.dir = 'ltr';
+    const body = el('div', 'lecture-body');
+    const st = lectureStats(l);
+    body.append(el('h3', '', l.title));
+    if (l.description) body.append(el('p', 'muted', l.description));
+    const kinds = el('div', 'lecture-items');
+    l.items.forEach(it => { const t = el('span', 'item-chip' + (done.has(itemKey(l, it)) ? ' done' : '')); t.append(svg(it.kind === 'video' ? 'video' : 'file'), it.title); kinds.append(t); });
+    if (!l.items.length) kinds.append(el('span', 'muted', 'المحتوى هيتضاف قريب'));
+    body.append(kinds);
+    const side = el('div', 'lecture-actions');
+    if (l.open) {
+      if (l.items.length) { const go = el('a', 'btn primary small'); go.href = lectureHref(c, l); go.append(svg('play'), st.finished ? 'كمّل' : 'ابدأ'); side.append(go, el('small', 'muted', `${st.finished} / ${st.total}`)); }
+      side.prepend(badge(c.free || !l.price ? 'مجانية' : 'مفتوحة', 'ok'));
+    } else {
+      side.append(badge(money(l.price), 'warn'), buyButton('lecture', l, 'افتح بالمحفظة'));
+      const code = el('a', 'text-link', 'عندي كود'); code.href = '#wallet'; side.append(code);
+    }
+    li.append(num, body, side);
+    lectures.append(li);
+  });
+  view.replaceChildren(el('div', 'view-back'), head, fb, el('h3', 'section-label', 'المحاضرات'), lectures);
+  view.firstChild.append(back);
+}
+function buyButton(kind, item, label) {
+  const b = el('button', 'btn outline small'); b.type = 'button'; b.append(svg('wallet'), label);
+  let armed = 0;
+  b.addEventListener('click', async () => {
+    const fb = $('#course-feedback');
+    if (!armed) { armed = setTimeout(() => { armed = 0; b.lastChild.textContent = label; }, 5000); b.lastChild.textContent = 'اضغط تاني للتأكيد · ' + money(kind === 'course' ? item.price : item.price); feedback(fb, `رصيدك ${money(balance)}. هيتخصم ${money(item.price)} لو أكدت.`, 'info'); return; }
+    clearTimeout(armed); armed = 0;
+    App.busy(b, true);
+    const r = await App.api('buy', { token, kind, id: item.id });
+    App.busy(b, false);
+    b.lastChild.textContent = label;
+    if (expired(r.code)) return;
+    if (r.ok) { balance = r.balance; feedback(fb, `تم فتح «${r.title}». رصيدك دلوقتي ${money(r.balance)}.`, 'success'); await loadCourses(); return; }
+    if (r.code === 'balance') { const t = el('span', '', `رصيدك ${money(r.balance)} مش كفاية (المطلوب ${money(r.price)}). `); const a = el('a', 'text-link', 'اشحن المحفظة'); a.href = '#wallet'; fb.replaceChildren(t, a); fb.dataset.type = 'error'; fb.hidden = false; return; }
+    feedback(fb, App.message(r.code));
+  });
+  return b;
+}
+async function setItem(l, it, on) {
+  const key = itemKey(l, it);
+  if (on) { done.add(key); await DB.put('progress', { key, owner, lecture: l.id, item: it.id, at: new Date().toISOString() }); }
   else { done.delete(key); await DB.del('progress', key); }
   renderHome(); renderCourses();
+  if (parts()[0] === 'lecture') renderItems();
 }
+let current = null;
+function renderItems() {
+  if (!current) return;
+  const { c, l, it } = current;
+  const list = $('#lecture-items');
+  list.replaceChildren(...l.items.map((x, i) => {
+    const li = el('li', 'item' + (x.id === it.id ? ' active' : '') + (done.has(itemKey(l, x)) ? ' done' : ''));
+    const a = el('a', 'item-link'); a.href = lectureHref(c, l, x);
+    if (x.id === it.id) a.setAttribute('aria-current', 'true');
+    const n = el('span', 'lecture-num', String(i + 1).padStart(2, '0')); n.dir = 'ltr';
+    a.append(n, svg(x.kind === 'video' ? 'video' : 'file'), el('span', '', x.title));
+    const tick = el('button', 'icon-btn'); tick.type = 'button'; const on = done.has(itemKey(l, x)); tick.setAttribute('aria-pressed', String(on)); tick.setAttribute('aria-label', on ? 'إلغاء «خلصته»' : 'علّمه خلصته'); tick.append(svg('check'));
+    tick.addEventListener('click', () => setItem(l, x, !done.has(itemKey(l, x))));
+    li.append(a, tick);
+    return li;
+  }));
+}
+async function renderLecture(courseId, lectureId, itemId) {
+  const c = findCourse(courseId);
+  const l = c && c.lectures.find(x => x.id === lectureId);
+  const box = $('#lecture-feedback');
+  if (!c || !l) { feedback(box, coursesState === 'loading' || coursesState === 'idle' ? 'جاري التحميل…' : 'المحاضرة دي مش متاحة ليك.', coursesState === 'loading' ? 'info' : 'error'); $('#stage').replaceChildren(); $('#lecture-items').replaceChildren(); return; }
+  $('#lecture-back').href = '#course/' + encodeURIComponent(c.id);
+  $('#lecture-course').textContent = c.title;
+  $('#lecture-title').textContent = l.title;
+  title.textContent = l.title;
+  if (!l.open) { feedback(box, 'المحاضرة دي مقفولة. افتحها من صفحة الدورة بالمحفظة أو بكود.', 'error'); $('#stage').replaceChildren(); $('#lecture-items').replaceChildren(); return; }
+  const it = l.items.find(x => x.id === itemId) || l.items.find(x => !done.has(itemKey(l, x))) || l.items[0];
+  if (!it) { feedback(box, 'المحاضرة دي لسه مفيهاش محتوى.', 'info'); return; }
+  current = { c, l, it };
+  renderItems();
+  const key = c.id + '|' + l.id + '|' + it.id;
+  if (viewKey === key) return;
+  viewKey = key;
+  feedback(box, '');
+  const stage = $('#stage');
+  if (Player) Player.destroy();
+  stage.replaceChildren(el('p', 'loading-line', it.kind === 'video' ? 'جاري تجهيز الفيديو…' : 'جاري فتح الملف…'));
+  const ask = mode => App.api('open', { token, lecture: l.id, item: it.id, mode });
+  const r = await ask(it.kind === 'video' ? 'stream' : 'view');
+  if (viewKey !== key) return;
+  if (!r.ok || !r.url) { if (expired(r.code)) return; viewKey = ''; stage.replaceChildren(); feedback(box, App.message(r.code)); return; }
+  if (!Player) return;
+  const posKey = 'pos:' + owner + '|' + it.id;
+  if (it.kind === 'video') {
+    const saved = await DB.get('kv', posKey);
+    Player.video(stage, {
+      url: r.url, mark: r.mark, resume: saved && typeof saved.t === 'number' ? saved.t : 0,
+      onProgress: (t, d) => { if (Number.isFinite(t)) DB.put('kv', { t: d && t > d - 8 ? 0 : t, at: Date.now() }, posKey); },
+      onEnd: () => { if (!done.has(itemKey(l, it))) setItem(l, it, true); },
+      refresh: async () => { const x = await ask('stream'); return x.ok ? x.url : ''; }
+    });
+  } else {
+    Player.pdf(stage, { url: r.url, mark: r.mark, tab: async () => { const x = await ask('tab'); if (!x.ok) feedback(box, App.message(x.code)); return x.ok ? x.url : ''; } });
+  }
+}
+async function loadWallet() {
+  if (!$('#wallet-panel') || walletState === 'loading') return;
+  walletState = 'loading';
+  $('#wallet-balance').textContent = balance.toLocaleString('ar-EG');
+  const r = await App.api('wallet', { token });
+  walletState = 'idle';
+  if (!r.ok) { if (!expired(r.code)) feedback($('#wallet-feedback'), App.message(r.code)); return; }
+  balance = r.balance;
+  $('#wallet-balance').textContent = r.balance.toLocaleString('ar-EG');
+  const KIND = { charge: 'شحن بكود', buy: 'شراء', admin: 'من الإدارة' };
+  $('#wallet-history').replaceChildren(...(r.history.length ? r.history.map(x => { const li = el('li'); const d = el('div'); d.append(el('strong', '', (KIND[x.kind] || x.kind) + (x.note ? ' · ' + x.note : '')), el('small', '', fmtTime(x.at))); const amt = el('b', 'amount' + (x.amount < 0 ? ' minus' : ''), (x.amount > 0 ? '+' : '') + x.amount.toLocaleString('ar-EG')); li.append(svg(x.amount < 0 ? 'book' : 'wallet'), d, amt); return li; }) : [el('li', 'empty', 'لسه مفيش عمليات على محفظتك.')]));
+  $('#wallet-owned').replaceChildren(...(r.owned.length ? r.owned.map(x => { const li = el('li'); const d = el('div'); d.append(el('strong', '', x.title), el('small', '', x.kind === 'course' ? 'دورة كاملة' : 'محاضرة')); li.append(svg('check'), d); return li; }) : [el('li', 'empty', 'المحتوى اللي هتفتحه بكود أو بالمحفظة هيظهر هنا.')]));
+}
+$('#redeem-form')?.addEventListener('submit', async e => {
+  e.preventDefault();
+  const input = $('#redeem-code'), box = $('#wallet-feedback');
+  const code = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  input.value = code.length > 8 ? code.slice(0, 4) + '-' + code.slice(4, 8) + '-' + code.slice(8, 12) : code;
+  feedback(box, '');
+  if (!fieldError(input, /^[A-HJ-NP-Z2-9]{12}$/.test(code) ? '' : 'الكود 12 حرف ورقم بالشكل XXXX-XXXX-XXXX.')) return;
+  const btn = $('#redeem-submit');
+  App.busy(btn, true);
+  const r = await App.api('redeem', { token, code });
+  App.busy(btn, false);
+  if (expired(r.code)) return;
+  if (!r.ok) { feedback(box, r.code === 'code_invalid' && typeof r.left === 'number' && r.left >= 0 ? App.message(r.code) + ` فاضلك ${r.left} محاولات.` : App.message(r.code)); return; }
+  input.value = '';
+  feedback(box, r.kind === 'wallet' ? `تم شحن ${money(r.amount)}. رصيدك دلوقتي ${money(r.balance)}.` : 'تم فتح: ' + r.unlocked.join('، ') + '.', 'success');
+  balance = r.balance;
+  walletState = 'idle';
+  await loadWallet();
+  loadCourses();
+});
 function renderNoteCourses() {
   const sel = $('#note-course');
   if (!sel) return;

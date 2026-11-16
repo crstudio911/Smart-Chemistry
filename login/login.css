@@ -27,3 +27,5 @@ fieldset{border:0;padding:0;margin:0;min-width:0;position:relative}legend{font-f
 .reject-note{padding:12px 14px;border-radius:var(--r-btn);border:1px solid var(--border);background:var(--surface-2);margin-bottom:18px;font-size:15px}
 .field.needs-fix>label:not(.upload),.field.needs-fix>.label{color:var(--danger)}.field.needs-fix>label:not(.upload)::after,.field.needs-fix>.label::after{content:" · محتاج تصحيح";font-weight:500;font-size:13px}.field.needs-fix input:not([type=radio]),.field.needs-fix select,.field.needs-fix .upload{border-color:var(--danger)}
 @media(max-width:400px){.otp{gap:6px}.otp input{min-height:50px!important;font-size:20px}}
+.choice.off{opacity:.5}.choice.off span{cursor:not-allowed}#center-fields,#fix-center-fields{padding:14px;border:1px dashed var(--border);border-radius:var(--r-card);margin-bottom:18px}#center-fields .field:last-child,#fix-center-fields .field:last-child{margin-bottom:0}
+.auth-foot{display:flex;flex-wrap:wrap;justify-content:center;gap:18px;margin-top:22px;font-size:13px;color:var(--muted)}.auth-foot a:hover{color:var(--accent)}

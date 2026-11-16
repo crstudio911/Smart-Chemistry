@@ -1,0 +1,276 @@
+const Player = (() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+  const icon = name => { const s = document.createElementNS(NS, 'svg'); s.setAttribute('class', 'icon'); s.setAttribute('aria-hidden', 'true'); const u = document.createElementNS(NS, 'use'); u.setAttribute('href', '#' + name); s.append(u); return s; };
+  const btn = (name, label, cls = '') => { const b = el('button', 'pl-btn ' + cls); b.type = 'button'; b.setAttribute('aria-label', label); b.title = label; b.append(icon(name)); return b; };
+  const clock = s => { if (!Number.isFinite(s) || s < 0) s = 0; s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(x).padStart(2, '0'); };
+  let active = null;
+  function guard(root) {
+    const stop = e => e.preventDefault();
+    root.addEventListener('contextmenu', stop);
+    root.addEventListener('dragstart', stop);
+    root.addEventListener('selectstart', stop);
+    root.addEventListener('copy', stop);
+  }
+  function watermark(root, mark, onTamper) {
+    const wm = el('div', 'pl-mark');
+    wm.setAttribute('aria-hidden', 'true');
+    const text = [mark.name, mark.phone].filter(Boolean).join(' · ');
+    wm.textContent = text;
+    root.append(wm);
+    let timer = 0, removed = 0;
+    const move = () => {
+      const w = root.clientWidth, h = root.clientHeight;
+      const mw = wm.offsetWidth || 160, mh = wm.offsetHeight || 24;
+      wm.style.setProperty('--x', Math.max(0, Math.random() * (w - mw)).toFixed(0) + 'px');
+      wm.style.setProperty('--y', Math.max(0, Math.random() * (h - mh - 56)).toFixed(0) + 'px');
+      timer = setTimeout(move, 3500 + Math.random() * 3500);
+    };
+    move();
+    const watch = new MutationObserver(() => {
+      if (!root.isConnected) { clearTimeout(timer); watch.disconnect(); return; }
+      const bad = wm.parentNode !== root || wm.textContent !== text || getComputedStyle(wm).display === 'none' || getComputedStyle(wm).visibility === 'hidden' || Number(getComputedStyle(wm).opacity) < 0.15;
+      if (!bad) return;
+      removed++;
+      if (wm.parentNode !== root) root.append(wm);
+      if (wm.textContent !== text) wm.textContent = text;
+      if (wm.hasAttribute('style')) wm.removeAttribute('style');
+      if (wm.className !== 'pl-mark') wm.className = 'pl-mark';
+      if (removed > 1 && onTamper) onTamper();
+    });
+    watch.observe(root, { childList: true, subtree: true, attributes: true, characterData: true });
+    return () => { clearTimeout(timer); watch.disconnect(); };
+  }
+  function destroy() { if (active) { active(); active = null; } }
+  function video(box, opt) {
+    destroy();
+    const root = el('div', 'player');
+    root.tabIndex = 0;
+    root.setAttribute('role', 'region');
+    root.setAttribute('aria-label', 'مشغل الفيديو');
+    const v = document.createElement('video');
+    v.playsInline = true;
+    v.preload = 'metadata';
+    v.disablePictureInPicture = true;
+    v.setAttribute('disablePictureInPicture', '');
+    v.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+    v.setAttribute('disableRemotePlayback', '');
+    v.src = opt.url;
+    const shade = el('div', 'pl-shade');
+    const big = btn('play', 'تشغيل', 'pl-big');
+    const spin = el('div', 'pl-spin'); spin.hidden = true;
+    const note = el('div', 'pl-note'); note.hidden = true;
+    const bar = el('div', 'pl-bar');
+    const seek = el('div', 'pl-seek');
+    const buffered = el('span', 'pl-buffered'), played = el('span', 'pl-played');
+    const range = el('input', 'pl-range'); range.type = 'range'; range.min = '0'; range.max = '1000'; range.step = '1'; range.value = '0'; range.setAttribute('aria-label', 'مكان التشغيل');
+    seek.append(buffered, played, range);
+    const play = btn('play', 'تشغيل'), back = btn('rewind', 'رجوع 10 ثواني'), fwd = btn('forward', 'تقديم 10 ثواني');
+    const time = el('span', 'pl-time', '0:00 / 0:00'); time.dir = 'ltr';
+    const mute = btn('volume', 'كتم الصوت');
+    const vol = el('input', 'pl-vol'); vol.type = 'range'; vol.min = '0'; vol.max = '1'; vol.step = '0.05'; vol.value = '1'; vol.setAttribute('aria-label', 'مستوى الصوت');
+    const speed = el('button', 'pl-btn pl-speed', '1x'); speed.type = 'button'; speed.setAttribute('aria-label', 'سرعة التشغيل'); speed.dir = 'ltr';
+    const full = btn('expand', 'ملء الشاشة');
+    const row = el('div', 'pl-row');
+    const left = el('div', 'pl-group'), right = el('div', 'pl-group');
+    right.append(play, back, fwd, time);
+    left.append(mute, vol, speed, full);
+    row.append(right, left);
+    bar.append(seek, row);
+    const tapL = el('div', 'pl-tap pl-tap-l'), tapR = el('div', 'pl-tap pl-tap-r');
+    const flash = el('div', 'pl-flash');
+    root.append(v, shade, tapR, tapL, big, spin, flash, note, bar);
+    box.replaceChildren(root);
+    guard(root);
+    const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
+    let hideTimer = 0, lastSave = 0, retried = 0, endReported = false, resumeAt = Number(opt.resume) || 0;
+    const showBar = () => { root.classList.add('ui'); clearTimeout(hideTimer); if (!v.paused) hideTimer = setTimeout(() => root.classList.remove('ui'), 2600); };
+    const flashMsg = t => { flash.textContent = t; flash.classList.remove('on'); void flash.offsetWidth; flash.classList.add('on'); };
+    const setIcon = (b, name) => b.querySelector('use').setAttribute('href', '#' + name);
+    const toggle = () => { if (v.paused) v.play().catch(() => {}); else v.pause(); };
+    const jump = s => { if (!Number.isFinite(v.duration)) return; v.currentTime = Math.min(Math.max(0, v.currentTime + s), v.duration - 0.2); flashMsg((s > 0 ? '+' : '−') + Math.abs(s) + ' ث'); showBar(); };
+    const draw = () => {
+      const d = v.duration || 0;
+      const p = d ? v.currentTime / d : 0;
+      played.style.setProperty('--p', (p * 100).toFixed(2) + '%');
+      if (!range.matches(':active')) range.value = String(Math.round(p * 1000));
+      let b = 0;
+      for (let i = 0; i < v.buffered.length; i++) if (v.buffered.start(i) <= v.currentTime + 1) b = Math.max(b, v.buffered.end(i));
+      buffered.style.setProperty('--p', (d ? b / d * 100 : 0).toFixed(2) + '%');
+      time.textContent = clock(v.currentTime) + ' / ' + clock(d);
+    };
+    v.addEventListener('loadedmetadata', () => { if (resumeAt > 5 && resumeAt < v.duration - 5) { v.currentTime = resumeAt; flashMsg('كمّلنا من ' + clock(resumeAt)); } resumeAt = 0; draw(); });
+    v.addEventListener('timeupdate', () => {
+      draw();
+      if (Date.now() - lastSave > 5000 && opt.onProgress) { lastSave = Date.now(); opt.onProgress(v.currentTime, v.duration); }
+      if (!endReported && v.duration && v.currentTime / v.duration >= 0.9) { endReported = true; if (opt.onEnd) opt.onEnd(); }
+    });
+    v.addEventListener('progress', draw);
+    v.addEventListener('play', () => { setIcon(play, 'pause'); play.setAttribute('aria-label', 'إيقاف مؤقت'); root.classList.add('playing'); big.hidden = true; showBar(); });
+    v.addEventListener('pause', () => { setIcon(play, 'play'); play.setAttribute('aria-label', 'تشغيل'); root.classList.remove('playing'); root.classList.add('ui'); if (opt.onProgress) opt.onProgress(v.currentTime, v.duration); });
+    v.addEventListener('waiting', () => { spin.hidden = false; });
+    v.addEventListener('playing', () => { spin.hidden = true; note.hidden = true; });
+    v.addEventListener('canplay', () => { spin.hidden = true; });
+    v.addEventListener('ended', () => { if (opt.onEnd && !endReported) { endReported = true; opt.onEnd(); } });
+    v.addEventListener('volumechange', () => { setIcon(mute, v.muted || v.volume === 0 ? 'mute' : 'volume'); mute.setAttribute('aria-label', v.muted ? 'تشغيل الصوت' : 'كتم الصوت'); if (!v.muted) vol.value = String(v.volume); });
+    v.addEventListener('error', async () => {
+      if (!opt.refresh || retried > 2) { spin.hidden = true; note.textContent = 'تعذر تشغيل الفيديو. تأكد من الإنترنت وجرّب تاني.'; note.hidden = false; return; }
+      retried++;
+      const at = v.currentTime, was = !v.paused;
+      spin.hidden = false;
+      const url = await opt.refresh();
+      if (!url) { spin.hidden = true; note.textContent = 'انتهت صلاحية رابط التشغيل. افتح المحاضرة تاني.'; note.hidden = false; return; }
+      resumeAt = at;
+      v.src = url;
+      if (was) v.play().catch(() => {});
+    });
+    big.addEventListener('click', toggle);
+    play.addEventListener('click', toggle);
+    back.addEventListener('click', () => jump(-10));
+    fwd.addEventListener('click', () => jump(10));
+    shade.addEventListener('click', () => { if (matchMedia('(pointer:coarse)').matches) { if (root.classList.contains('ui') && !v.paused) root.classList.remove('ui'); else showBar(); return; } toggle(); });
+    let tapAt = 0, tapSide = '';
+    [[tapL, -10, 'l'], [tapR, 10, 'r']].forEach(([zone, s, side]) => zone.addEventListener('click', e => {
+      const now = Date.now();
+      if (now - tapAt < 320 && tapSide === side) { jump(s); tapAt = 0; e.stopPropagation(); return; }
+      tapAt = now; tapSide = side;
+      setTimeout(() => { if (tapAt === now) { if (matchMedia('(pointer:coarse)').matches) { if (root.classList.contains('ui') && !v.paused) root.classList.remove('ui'); else showBar(); } else toggle(); } }, 330);
+    }));
+    range.addEventListener('input', () => { if (v.duration) { v.currentTime = Number(range.value) / 1000 * v.duration; draw(); } });
+    mute.addEventListener('click', () => { v.muted = !v.muted; });
+    vol.addEventListener('input', () => { v.volume = Number(vol.value); v.muted = v.volume === 0; });
+    speed.addEventListener('click', () => { const i = SPEEDS.indexOf(v.playbackRate); v.playbackRate = SPEEDS[(i + 1) % SPEEDS.length]; speed.textContent = v.playbackRate + 'x'; flashMsg('السرعة ' + v.playbackRate + 'x'); });
+    const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+    full.addEventListener('click', async () => {
+      try {
+        if (fsEl()) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+        else {
+          if (root.requestFullscreen) await root.requestFullscreen({ navigationUI: 'hide' });
+          else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+          else root.classList.toggle('pseudo-full');
+          try { await screen.orientation.lock('landscape'); } catch {}
+        }
+      } catch { root.classList.toggle('pseudo-full'); }
+    });
+    const onFs = () => { const on = fsEl() === root || root.classList.contains('pseudo-full'); setIcon(full, on ? 'shrink' : 'expand'); full.setAttribute('aria-label', on ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'); };
+    document.addEventListener('fullscreenchange', onFs);
+    document.addEventListener('webkitfullscreenchange', onFs);
+    root.addEventListener('mousemove', showBar);
+    root.addEventListener('keydown', e => {
+      if (e.target === range || e.target === vol) return;
+      const k = e.key.toLowerCase();
+      if (k === ' ' || k === 'k') { e.preventDefault(); toggle(); }
+      else if (k === 'arrowright') { e.preventDefault(); jump(document.dir === 'rtl' ? -5 : 5); }
+      else if (k === 'arrowleft') { e.preventDefault(); jump(document.dir === 'rtl' ? 5 : -5); }
+      else if (k === 'f') full.click();
+      else if (k === 'm') mute.click();
+      else if (k === 'arrowup') { e.preventDefault(); v.volume = Math.min(1, v.volume + 0.1); }
+      else if (k === 'arrowdown') { e.preventDefault(); v.volume = Math.max(0, v.volume - 0.1); }
+    });
+    const hidden = () => { if (document.hidden && !v.paused) v.pause(); };
+    document.addEventListener('visibilitychange', hidden);
+    const unmark = watermark(root, opt.mark || {}, () => { v.pause(); note.textContent = 'العلامة المائية لازم تفضل ظاهرة علشان الفيديو يشتغل.'; note.hidden = false; });
+    root.classList.add('ui');
+    active = () => {
+      if (opt.onProgress && v.currentTime) opt.onProgress(v.currentTime, v.duration);
+      unmark();
+      document.removeEventListener('fullscreenchange', onFs);
+      document.removeEventListener('webkitfullscreenchange', onFs);
+      document.removeEventListener('visibilitychange', hidden);
+      v.pause(); v.removeAttribute('src'); v.load();
+      root.remove();
+    };
+    return { root, video: v };
+  }
+  let lib = null;
+  const HERE = new URL('.', document.currentScript ? document.currentScript.src : location.href);
+  function pdfjs() {
+    if (!lib) lib = import(new URL('vendor/pdf.min.mjs', HERE).href).then(m => { m.GlobalWorkerOptions.workerSrc = new URL('vendor/pdf.worker.min.mjs', HERE).href; return m; }).catch(e => { lib = null; throw e; });
+    return lib;
+  }
+  async function pdf(box, opt) {
+    destroy();
+    const root = el('div', 'reader');
+    const tools = el('div', 'rd-tools');
+    const out = btn('minus', 'تصغير'), inn = btn('plus', 'تكبير'), fit = btn('expand', 'ملء العرض');
+    const info = el('span', 'rd-info', 'جاري فتح الملف…');
+    const copy = el('button', 'btn outline small rd-copy'); copy.type = 'button'; copy.append(icon('download'), 'حمّل نسختك');
+    tools.append(el('div', 'pl-group'), info, copy);
+    tools.firstChild.append(out, inn, fit);
+    const pages = el('div', 'rd-pages');
+    root.append(tools, pages);
+    box.replaceChildren(root);
+    guard(root);
+    let closed = false, doc = null, scale = 0, io = null;
+    const mark = [opt.mark && opt.mark.name, opt.mark && opt.mark.phone].filter(Boolean).join(' · ');
+    copy.addEventListener('click', async () => {
+      copy.disabled = true;
+      const w = window.open('', '_blank');
+      const url = opt.tab ? await opt.tab() : '';
+      copy.disabled = false;
+      if (w && url) { try { w.opener = null; } catch {} w.location.replace(url); }
+      else if (w) w.close();
+      if (!url && opt.onError) opt.onError();
+    });
+    const unmark = watermark(root, opt.mark || {}, null);
+    active = () => { closed = true; unmark(); if (io) io.disconnect(); if (doc) doc.destroy(); root.remove(); };
+    try {
+      const m = await pdfjs();
+      if (closed) return;
+      doc = await m.getDocument({ url: opt.url, isEvalSupported: false, withCredentials: false, rangeChunkSize: 262144, disableStream: false, disableAutoFetch: true }).promise;
+    } catch {
+      if (!closed) info.textContent = 'تعذر فتح الملف. تأكد من الإنترنت وجرّب تاني.';
+      return;
+    }
+    if (closed) return;
+    info.textContent = doc.numPages + ' صفحة';
+    const first = await doc.getPage(1);
+    const base = first.getViewport({ scale: 1 });
+    const fitScale = () => Math.min(2.2, Math.max(0.4, (pages.clientWidth - 24) / base.width));
+    scale = fitScale();
+    const holders = [];
+    for (let i = 1; i <= doc.numPages; i++) { const h = el('div', 'rd-page'); h.dataset.page = String(i); holders.push(h); pages.append(h); }
+    const rendered = new Map();
+    async function render(h) {
+      const n = Number(h.dataset.page);
+      if (rendered.get(n) === scale) return;
+      rendered.set(n, scale);
+      const page = await doc.getPage(n);
+      if (closed) return;
+      const vp = page.getViewport({ scale });
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      const c = document.createElement('canvas');
+      c.width = Math.floor(vp.width * ratio); c.height = Math.floor(vp.height * ratio);
+      c.style.width = Math.floor(vp.width) + 'px'; c.style.height = Math.floor(vp.height) + 'px';
+      const ctx = c.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport: vp, transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null }).promise;
+      if (mark) {
+        ctx.save();
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.globalAlpha = 0.11; ctx.fillStyle = '#1167B1'; ctx.font = '600 ' + Math.round(16 * scale) + 'px "IBM Plex Sans Arabic", sans-serif'; ctx.textAlign = 'center';
+        ctx.translate(vp.width / 2, vp.height / 2); ctx.rotate(-Math.PI / 6);
+        for (let y = -vp.height; y < vp.height; y += 150 * scale) for (let x = -vp.width; x < vp.width; x += 320 * scale) ctx.fillText(mark, x, y);
+        ctx.restore();
+      }
+      if (closed) return;
+      h.replaceChildren(c);
+      h.style.removeProperty('min-height');
+    }
+    function layout() {
+      rendered.clear();
+      holders.forEach(h => { h.style.minHeight = Math.floor(base.height * scale) + 'px'; h.style.width = Math.floor(base.width * scale) + 'px'; });
+      holders.forEach(h => { if (h.getBoundingClientRect().top < window.innerHeight * 2) render(h); });
+    }
+    io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) render(e.target); }), { rootMargin: '600px 0px' });
+    holders.forEach(h => io.observe(h));
+    layout();
+    const zoom = f => { scale = Math.min(3, Math.max(0.4, f)); layout(); };
+    out.addEventListener('click', () => zoom(scale / 1.2));
+    inn.addEventListener('click', () => zoom(scale * 1.2));
+    fit.addEventListener('click', () => zoom(fitScale()));
+    if (opt.onOpen) opt.onOpen(doc.numPages);
+    return { root };
+  }
+  return { video, pdf, destroy };
+})();
+window.Player = Player;
