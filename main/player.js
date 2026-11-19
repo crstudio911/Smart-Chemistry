@@ -271,6 +271,6 @@ const Player = (() => {
     if (opt.onOpen) opt.onOpen(doc.numPages);
     return { root };
   }
-  return { video, pdf, destroy };
+  return { video, pdf, destroy, pdfjs };
 })();
 window.Player = Player;

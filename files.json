@@ -1,5 +1,5 @@
 {
- "version": "13",
+ "version": "14",
  "files": [
   "404.html",
   "404/404.css",
@@ -28,6 +28,7 @@
   "main/main.html",
   "main/main.js",
   "main/player.js",
+  "main/quiz.js",
   "main/vendor/LICENSE-pdfjs.txt",
   "main/vendor/pdf.min.mjs",
   "main/vendor/pdf.worker.min.mjs",

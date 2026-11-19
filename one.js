@@ -116,9 +116,15 @@ const App = (() => {
     code_used: 'الكود ده اتستخدم قبل كده.',
     code_mine: 'أنت استخدمت الكود ده قبل كده.',
     redeem_locked: 'محاولات كتير غلط. استنى ساعة وجرّب تاني.',
+    quiz_done: 'أنت سلّمت ده قبل كده.',
+    quiz_left: 'خرجت من الامتحان، فاتقفل على إجاباتك.',
+    quiz_soon: 'لسه متفتحش.',
+    quiz_closed: 'الوقت المسموح خلص.',
+    quiz_time: 'الوقت خلص.',
+    slow: 'طلبات كتير ورا بعض. استنى دقيقة وحاول تاني.',
     server: 'حصلت مشكلة في الخادم. حاول تاني بعد شوية.'
   };
-  async function api(action, payload = {}) {
+  async function api(action, payload = {}, opts = {}) {
     await ready;
     let res;
     try {
@@ -127,6 +133,7 @@ const App = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, ...payload, device: cache.device }),
         credentials: 'omit',
+        keepalive: !!opts.keepalive,
         signal: AbortSignal.timeout(45000)
       });
     } catch { return { ok: false, code: 'network' }; }

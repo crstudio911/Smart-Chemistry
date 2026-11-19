@@ -12,8 +12,11 @@ const title = document.querySelector('#section-title');
 const $ = s => document.querySelector(s);
 const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
 const svg = name => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('class', 'icon'); s.setAttribute('aria-hidden', 'true'); const u = document.createElementNS('http://www.w3.org/2000/svg', 'use'); u.setAttribute('href', '#' + name); s.append(u); return s; };
-let user = null, owner = '', courses = [], coursesState = 'idle', notes = [], done = new Set(), editing = null, filter = 'all', scrollTo = '', balance = 0, walletState = 'idle', viewKey = '';
+let user = null, owner = '', courses = [], coursesState = 'idle', notes = [], done = new Set(), editing = null, filter = 'all', scrollTo = '', balance = 0, walletState = 'idle', viewKey = '', results = [], lastBoot = 0, booting = null;
 const Player = window.Player || null;
+const Quiz = window.Quiz || null;
+const QUIZ_KINDS = ['homework', 'exam'];
+const kindIcon = k => ({ video: 'video', pdf: 'file', homework: 'clipboard', exam: 'timer' }[k] || 'file');
 function feedback(box, text, type = 'error') { if (!box) return; box.textContent = text; box.dataset.type = type; box.hidden = !text; }
 function setSidebar(open) { sidebar.classList.toggle('open', open); toggle.setAttribute('aria-expanded', String(open)); $('.scrim').hidden = !open; }
 toggle.addEventListener('click', () => setSidebar(!sidebar.classList.contains('open')));
@@ -26,7 +29,7 @@ function route() {
   const link = [...links].find(l => labPage ? l.pathname.endsWith('/lab.html') : periodicPage ? l.pathname.endsWith('/periodic.html') : l.hash === section && l.pathname === location.pathname) || links[0];
   links.forEach(l => { const on = l === link; l.classList.toggle('active', on); if (on) l.setAttribute('aria-current', 'page'); else l.removeAttribute('aria-current'); });
   title.textContent = link.dataset.title;
-  for (const [panel, hash] of [['#profile-panel', '#profile'], ['#home-panel', '#main'], ['#courses-panel', '#courses'], ['#notes-panel', '#notes'], ['#wallet-panel', '#wallet']]) { const p = $(panel); if (p) p.hidden = !user || link.hash !== hash || (hash === '#courses' && id === 'lecture'); }
+  for (const [panel, hash] of [['#profile-panel', '#profile'], ['#home-panel', '#main'], ['#courses-panel', '#courses'], ['#notes-panel', '#notes'], ['#wallet-panel', '#wallet'], ['#results-panel', '#results']]) { const p = $(panel); if (p) p.hidden = !user || link.hash !== hash || (hash === '#courses' && id === 'lecture'); }
   if ($('#lecture-panel')) $('#lecture-panel').hidden = !user || id !== 'lecture';
   setSidebar(false);
   if (mainPage && user) renderView();
@@ -100,28 +103,41 @@ async function loadLocal() {
   const cached = await DB.get('kv', 'courses:' + owner);
   if (cached && Array.isArray(cached.courses)) courses = cached.courses.filter(c => c && Array.isArray(c.lectures));
 }
-async function loadCourses() {
-  if (!mainPage) return;
-  coursesState = 'loading';
-  feedback($('#courses-feedback'), courses.length ? '' : 'جاري تحميل الدورات…', 'info');
-  $('#courses-retry').hidden = true;
-  renderCourses();
-  const r = await App.api('courses', { token });
-  if (r.ok && Array.isArray(r.courses)) {
-    courses = r.courses.filter(c => c && typeof c.id === 'string' && Array.isArray(c.lectures));
-    if (typeof r.balance === 'number') balance = r.balance;
-    coursesState = 'ready';
-    feedback($('#courses-feedback'), '');
-    DB.put('kv', { at: new Date().toISOString(), courses }, 'courses:' + owner);
-  } else {
-    if (expired(r.code)) return;
-    coursesState = 'error';
-    feedback($('#courses-feedback'), courses.length ? 'تعذر تحديث الدورات، وده آخر نسخة محفوظة على جهازك.' : App.message(r.code), courses.length ? 'info' : 'error');
-    $('#courses-retry').hidden = false;
-  }
-  renderAll();
+function loadCourses() { return refreshBoot(false); }
+function applyBoot(r) {
+  if (Array.isArray(r.courses)) courses = r.courses.filter(c => c && typeof c.id === 'string' && Array.isArray(c.lectures));
+  if (typeof r.balance === 'number') balance = r.balance;
+  if (Array.isArray(r.results)) results = r.results;
+  if (Array.isArray(r.notices)) renderNotices(r.notices);
+  coursesState = 'ready';
 }
-function renderAll() { renderHome(); renderCourses(); renderNoteCourses(); renderNotes(); renderView(); }
+function refreshBoot(silent) {
+  if (booting) return booting;
+  booting = (async () => {
+    if (!silent && !courses.length) { coursesState = 'loading'; feedback($('#courses-feedback'), 'جاري تحميل الدورات…', 'info'); }
+    if ($('#courses-retry')) $('#courses-retry').hidden = true;
+    const r = await App.api('boot', { token });
+    lastBoot = Date.now();
+    if (!r.ok || !r.user) {
+      if (expired(r.code)) return r;
+      coursesState = courses.length ? 'ready' : 'error';
+      if (!silent) feedback($('#courses-feedback'), courses.length ? 'تعذر التحديث، وده آخر نسخة محفوظة على جهازك.' : App.message(r.code), courses.length ? 'info' : 'error');
+      if ($('#courses-retry')) $('#courses-retry').hidden = false;
+      renderAll();
+      return r;
+    }
+    feedback($('#courses-feedback'), '');
+    DB.put('kv', { t: token.slice(-16), at: Date.now(), data: r }, 'boot');
+    if (Quiz && Quiz.running()) { courses = r.courses || courses; balance = r.balance; results = r.results || results; return r; }
+    if (!user || JSON.stringify(user) !== JSON.stringify(r.user)) showUser(r.user);
+    applyBoot(r);
+    renderAll();
+    return r;
+  })();
+  booting.finally(() => { booting = null; });
+  return booting;
+}
+function renderAll() { renderHome(); renderCourses(); renderNoteCourses(); renderNotes(); renderResults(); renderView(); }
 function nextItem() {
   for (const { c, l } of uniqueOpen(courses)) { const it = l.items.find(x => !done.has(itemKey(l, x))); if (it) return { c, l, it }; }
   return null;
@@ -138,7 +154,7 @@ function renderHome() {
   $('#stat-reminders').textContent = String(upcoming().length);
   $('#stat-notes').textContent = String(notes.filter(n => !n.done).length);
   $('#home-headline').textContent = !t.total ? 'دوراتك هتظهر هنا.' : t.percent === 100 ? 'خلّصت كل محاضراتك.' : t.finished ? `أنجزت ${t.percent}% من محاضراتك.` : 'ابدأ أول محاضرة النهارده.';
-  $('#home-sub').textContent = !t.total ? (coursesState === 'loading' ? 'جاري تحميل دوراتك…' : 'لسه مفيش محاضرات مفتوحة ليك.') : t.percent === 100 ? 'راجع ملاحظاتك وخليك جاهز للامتحان.' : `فاضلك ${t.total - t.finished} من الفيديوهات والملفات، كمّل من مكان ما وقفت.`;
+  $('#home-sub').textContent = !t.total ? (coursesState === 'loading' ? 'جاري تحميل دوراتك…' : 'لسه مفيش محاضرات مفتوحة ليك.') : t.percent === 100 ? 'راجع ملاحظاتك وخليك جاهز للامتحان.' : `فاضلك ${t.total - t.finished} من الدروس والواجبات، كمّل من مكان ما وقفت.`;
   const next = $('#home-next');
   const target = nextItem();
   next.replaceChildren();
@@ -147,7 +163,7 @@ function renderHome() {
     const card = el('div', 'next-lesson');
     card.append(el('span', 'profile-eyebrow', target.c.title + ' · ' + target.l.title), el('strong', '', target.it.title), bar(s.total ? Math.round(s.finished * 100 / s.total) : 0), el('small', 'muted', `${s.finished} من ${s.total} في المحاضرة`));
     const actions = el('div', 'next-actions');
-    const open = el('a', 'btn primary small'); open.href = lectureHref(target.c, target.l, target.it); open.append(svg(target.it.kind === 'video' ? 'play' : 'file'), target.it.kind === 'video' ? 'كمّل الفيديو' : 'افتح الملف');
+    const open = el('a', 'btn primary small'); open.href = lectureHref(target.c, target.l, target.it); open.append(svg(target.it.kind === 'video' ? 'play' : kindIcon(target.it.kind)), { video: 'كمّل الفيديو', pdf: 'افتح الملف', homework: 'حل الواجب', exam: 'ادخل الامتحان' }[target.it.kind] || 'افتح');
     const all = el('a', 'btn outline small', 'افتح الدورة'); all.href = '#course/' + encodeURIComponent(target.c.id);
     actions.append(open, all);
     card.append(actions);
@@ -201,11 +217,12 @@ function renderView() {
   if (!mainPage || !user) return;
   const [id, a, b, c] = parts();
   const list = $('#courses-list'), view = $('#course-view');
-  if (id !== 'lecture' && Player) { Player.destroy(); viewKey = ''; }
+  if (id !== 'lecture') { if (Player) Player.destroy(); if (Quiz) Quiz.destroy('nav'); viewKey = ''; }
   if (id === 'course') { list.hidden = true; view.hidden = false; renderCourseView(a); }
   else { list.hidden = false; view.hidden = true; }
   if (id === 'lecture') renderLecture(a, b, c);
   if (id === 'wallet') loadWallet();
+  if (id === 'results' && Date.now() - lastBoot > 30000) refreshResults();
 }
 function renderCourseView(id) {
   const view = $('#course-view');
@@ -238,7 +255,7 @@ function renderCourseView(id) {
     body.append(el('h3', '', l.title));
     if (l.description) body.append(el('p', 'muted', l.description));
     const kinds = el('div', 'lecture-items');
-    l.items.forEach(it => { const t = el('span', 'item-chip' + (done.has(itemKey(l, it)) ? ' done' : '')); t.append(svg(it.kind === 'video' ? 'video' : 'file'), it.title); kinds.append(t); });
+    l.items.forEach(it => { const t = el('span', 'item-chip' + (done.has(itemKey(l, it)) ? ' done' : '') + (QUIZ_KINDS.includes(it.kind) ? ' ' + it.kind : '')); t.append(svg(kindIcon(it.kind)), it.title); kinds.append(t); });
     if (!l.items.length) kinds.append(el('span', 'muted', 'المحتوى هيتضاف قريب'));
     body.append(kinds);
     const side = el('div', 'lecture-actions');
@@ -290,7 +307,7 @@ function renderItems() {
     const a = el('a', 'item-link'); a.href = lectureHref(c, l, x);
     if (x.id === it.id) a.setAttribute('aria-current', 'true');
     const n = el('span', 'lecture-num', String(i + 1).padStart(2, '0')); n.dir = 'ltr';
-    a.append(n, svg(x.kind === 'video' ? 'video' : 'file'), el('span', '', x.title));
+    a.append(n, svg(kindIcon(x.kind)), el('span', '', x.title));
     const tick = el('button', 'icon-btn'); tick.type = 'button'; const on = done.has(itemKey(l, x)); tick.setAttribute('aria-pressed', String(on)); tick.setAttribute('aria-label', on ? 'إلغاء «خلصته»' : 'علّمه خلصته'); tick.append(svg('check'));
     tick.addEventListener('click', () => setItem(l, x, !done.has(itemKey(l, x))));
     li.append(a, tick);
@@ -317,6 +334,17 @@ async function renderLecture(courseId, lectureId, itemId) {
   feedback(box, '');
   const stage = $('#stage');
   if (Player) Player.destroy();
+  if (Quiz) Quiz.destroy('nav');
+  $('.lecture-grid').classList.toggle('quiz-mode', QUIZ_KINDS.includes(it.kind));
+  if (QUIZ_KINDS.includes(it.kind)) {
+    if (!Quiz) return;
+    Quiz.mount(stage, {
+      token, lecture: l.id, item: it.id, title: it.title, api: (action, p) => App.api(action, p), expired,
+      onInfo: info => { if (info.attempt && info.attempt.status !== 'open' && !done.has(itemKey(l, it))) setItem(l, it, true); },
+      onDone: () => { if (!done.has(itemKey(l, it))) setItem(l, it, true); refreshResults(); }
+    });
+    return;
+  }
   stage.replaceChildren(el('p', 'loading-line', it.kind === 'video' ? 'جاري تجهيز الفيديو…' : 'جاري فتح الملف…'));
   const ask = mode => App.api('open', { token, lecture: l.id, item: it.id, mode });
   const r = await ask(it.kind === 'video' ? 'stream' : 'view');
@@ -515,16 +543,8 @@ function noticeBar() {
   if (!bar) { bar = el('section', 'notices'); bar.id = 'notices'; bar.setAttribute('aria-label', 'الإشعارات'); $('.main').prepend(bar); }
   return bar;
 }
-async function loadNotices() {
-  const key = 'notices:' + owner;
-  const cached = await DB.get('kv', key);
-  const age = cached ? Date.now() - cached.at : -1;
-  let list = cached && Array.isArray(cached.list) && age >= 0 && age < 120000 ? cached.list : null;
-  if (!list) {
-    const r = await App.api('notices', { token });
-    if (!r.ok || !Array.isArray(r.notices)) { if (!expired(r.code) && cached && Array.isArray(cached.list)) list = cached.list; else return; }
-    else { list = r.notices; await DB.put('kv', { at: Date.now(), list }, key); }
-  }
+async function renderNotices(list) {
+  if (!owner || !Array.isArray(list)) return;
   const dismissed = new Set((await DB.get('kv', 'dismissed:' + owner)) || []);
   const shown = list.filter(n => n && typeof n.id === 'string' && !dismissed.has(n.id + ':' + n.rev));
   const bar = noticeBar();
@@ -548,30 +568,69 @@ async function loadNotices() {
   }));
   bar.hidden = !shown.length;
 }
+const RESULT_STATUS = { done: ['اتسلم', 'ok'], left: ['خرجت قبل التسليم', 'warn'], time: ['الوقت خلص', 'warn'], open: ['لسه مكملتش', ''] };
+async function refreshResults() {
+  const r = await App.api('results', { token });
+  if (r.ok && Array.isArray(r.results)) { results = r.results; renderResults(); }
+  else if (!r.ok) expired(r.code);
+}
+function renderResults() {
+  const list = $('#results-list');
+  if (!list) return;
+  const finished = results.filter(x => x.status !== 'open' && typeof x.score === 'number' && x.total);
+  const avg = finished.length ? Math.round(finished.reduce((m, x) => m + x.score / x.total, 0) * 100 / finished.length) : 0;
+  $('#results-avg').textContent = finished.length ? avg + '%' : '—';
+  $('#results-count').textContent = String(finished.length);
+  $('#results-exams').textContent = String(finished.filter(x => x.kind === 'exam').length);
+  $('#results-best').textContent = finished.length ? Math.max(...finished.map(x => Math.round(x.score * 100 / x.total))) + '%' : '—';
+  if (!results.length) { list.replaceChildren(el('li', 'empty', 'لسه محلّتش واجبات أو امتحانات. هتلاقيهم جوه المحاضرات.')); return; }
+  list.replaceChildren(...results.map(x => {
+    const li = el('li', 'result-row');
+    const ic = el('span', 'result-icon'); ic.dataset.kind = x.kind; ic.append(svg(kindIcon(x.kind)));
+    const body = el('div', 'result-body');
+    const st = RESULT_STATUS[x.status] || [x.status, ''];
+    const tag = badge(x.kind === 'exam' ? 'امتحان' : 'واجب', x.kind === 'exam' ? 'bad' : 'ok');
+    body.append(el('strong', '', x.title), el('small', 'muted', fmtTime(x.submittedAt || x.startedAt) + ' · ' + st[0]));
+    const p = x.total && typeof x.score === 'number' ? Math.round(x.score * 100 / x.total) : 0;
+    const side = el('div', 'result-score');
+    const sc = el('b', '', typeof x.score === 'number' ? x.score + ' / ' + x.total : '—'); sc.dir = 'ltr';
+    side.append(sc, bar(p));
+    li.append(ic, body, tag, side);
+    return li;
+  }));
+}
 async function loadUser() {
-  feedback($('#page-feedback'), 'جاري تحميل حسابك…', 'info');
   $('#user-retry').hidden = true;
-  const r = await App.api('me', { token });
-  if (!r.ok || !r.user) {
-    if (expired(r.code)) return;
-    feedback($('#page-feedback'), App.message(r.code));
-    $('#user-name').textContent = 'تعذر تحميل الحساب';
-    $('#user-retry').hidden = false;
+  const cached = await DB.get('kv', 'boot');
+  const hit = cached && cached.t === token.slice(-16) && cached.data && cached.data.user ? cached.data : null;
+  if (hit) await start(hit);
+  else feedback($('#page-feedback'), 'جاري تحميل حسابك…', 'info');
+  const r = await refreshBoot(!!hit);
+  if (!user) {
+    if (r && !r.ok && !expired(r.code)) { feedback($('#page-feedback'), App.message(r.code)); $('#user-name').textContent = 'تعذر تحميل الحساب'; $('#user-retry').hidden = false; }
     return;
   }
+  if (!hit && r && r.ok) await start(r);
+}
+async function start(data) {
+  if (start.done) return;
+  start.done = true;
   feedback($('#page-feedback'), '');
-  showUser(r.user);
+  showUser(data.user);
   owner = user.studentPhone;
-  loadNotices();
   await loadLocal();
+  applyBoot(data);
   renderAll();
   checkReminders();
   if (!loadUser.timer) loadUser.timer = setInterval(checkReminders, 15000);
-  loadCourses();
   if ($('#home-announcement')) Site.load().then(s => { const text = s && s.settings && s.settings.announcement; if (text) { $('#home-announcement').textContent = text; $('#home-announcement').hidden = false; } });
+  const stale = () => !document.hidden && navigator.onLine && Date.now() - lastBoot > 60000 && !(Quiz && Quiz.running());
+  document.addEventListener('visibilitychange', () => { if (stale()) refreshBoot(true); });
+  window.addEventListener('online', () => { if (!(Quiz && Quiz.running())) refreshBoot(true); });
+  setInterval(() => { if (stale() && Date.now() - lastBoot > 300000) refreshBoot(true); }, 60000);
 }
 $('#user-retry').addEventListener('click', loadUser);
-$('#courses-retry')?.addEventListener('click', loadCourses);
+$('#courses-retry')?.addEventListener('click', () => refreshBoot(false));
 $('#profile-cancel')?.addEventListener('click', () => { resetProfile(); feedback($('#profile-feedback'), 'تم إلغاء التغييرات غير المحفوظة.', 'info'); });
 $('#profile-form')?.addEventListener('submit', async e => {
   e.preventDefault();

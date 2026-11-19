@@ -1,4 +1,4 @@
-const CACHE = 'sc-offline-13';
+const CACHE = 'sc-offline-14';
 const FILES = ['404/dis.html', '404/404.css', '404/404.js', 'one.css', 'one.js', 'img/logo.png'];
 const at = path => new URL(path, self.registration.scope).href;
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES.map(at))).then(() => self.skipWaiting())); });
