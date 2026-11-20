@@ -15,10 +15,10 @@ const Player = (() => {
   function watermark(root, mark, onTamper) {
     const wm = el('div', 'pl-mark');
     wm.setAttribute('aria-hidden', 'true');
-    const text = [mark.name, mark.phone].filter(Boolean).join(' · ');
+    const text = [mark.name, mark.phone].filter(Boolean).join(' - ');
     wm.textContent = text;
     root.append(wm);
-    let timer = 0, removed = 0;
+    let timer = 0, checkTimer = 0, blocked = false;
     const move = () => {
       const w = root.clientWidth, h = root.clientHeight;
       const mw = wm.offsetWidth || 160, mh = wm.offsetHeight || 24;
@@ -27,19 +27,19 @@ const Player = (() => {
       timer = setTimeout(move, 3500 + Math.random() * 3500);
     };
     move();
-    const watch = new MutationObserver(() => {
-      if (!root.isConnected) { clearTimeout(timer); watch.disconnect(); return; }
-      const bad = wm.parentNode !== root || wm.textContent !== text || getComputedStyle(wm).display === 'none' || getComputedStyle(wm).visibility === 'hidden' || Number(getComputedStyle(wm).opacity) < 0.15;
-      if (!bad) return;
-      removed++;
-      if (wm.parentNode !== root) root.append(wm);
-      if (wm.textContent !== text) wm.textContent = text;
-      if (wm.hasAttribute('style')) wm.removeAttribute('style');
-      if (wm.className !== 'pl-mark') wm.className = 'pl-mark';
-      if (removed > 1 && onTamper) onTamper();
-    });
+    const check = () => {
+      if (!root.isConnected) { clearTimeout(timer); clearInterval(checkTimer); watch.disconnect(); return; }
+      if (blocked || !onTamper) return;
+      const style = getComputedStyle(wm), r = wm.getBoundingClientRect(), host = root.getBoundingClientRect();
+      let hidden = false;
+      for (let n = wm; n && n !== root.parentElement; n = n.parentElement) { const s = getComputedStyle(n); if (s.display === 'none' || s.visibility !== 'visible' || Number(s.opacity) < 0.15) hidden = true; }
+      const bad = hidden || wm.parentNode !== root || wm.textContent !== text || wm.className !== 'pl-mark' || style.clipPath !== 'none' || r.width < 8 || r.height < 8 || r.right <= host.left || r.left >= host.right || r.bottom <= host.top || r.top >= host.bottom;
+      if (bad) { blocked = true; clearTimeout(timer); onTamper(); }
+    };
+    const watch = new MutationObserver(check);
     watch.observe(root, { childList: true, subtree: true, attributes: true, characterData: true });
-    return () => { clearTimeout(timer); watch.disconnect(); };
+    checkTimer = setInterval(check, 500);
+    return () => { clearTimeout(timer); clearInterval(checkTimer); watch.disconnect(); };
   }
   function destroy() { if (active) { active(); active = null; } }
   function video(box, opt) {
@@ -50,6 +50,7 @@ const Player = (() => {
     root.setAttribute('aria-label', 'مشغل الفيديو');
     const v = document.createElement('video');
     v.playsInline = true;
+    v.crossOrigin = 'anonymous';
     v.preload = 'metadata';
     v.disablePictureInPicture = true;
     v.setAttribute('disablePictureInPicture', '');
@@ -83,11 +84,12 @@ const Player = (() => {
     box.replaceChildren(root);
     guard(root);
     const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
+    let locked = false;
     let hideTimer = 0, lastSave = 0, retried = 0, endReported = false, resumeAt = Number(opt.resume) || 0;
     const showBar = () => { root.classList.add('ui'); clearTimeout(hideTimer); if (!v.paused) hideTimer = setTimeout(() => root.classList.remove('ui'), 2600); };
     const flashMsg = t => { flash.textContent = t; flash.classList.remove('on'); void flash.offsetWidth; flash.classList.add('on'); };
     const setIcon = (b, name) => b.querySelector('use').setAttribute('href', '#' + name);
-    const toggle = () => { if (v.paused) v.play().catch(() => {}); else v.pause(); };
+    const toggle = () => { if (locked) return; if (v.paused) v.play().catch(() => {}); else v.pause(); };
     const jump = s => { if (!Number.isFinite(v.duration)) return; v.currentTime = Math.min(Math.max(0, v.currentTime + s), v.duration - 0.2); flashMsg((s > 0 ? '+' : '−') + Math.abs(s) + ' ث'); showBar(); };
     const draw = () => {
       const d = v.duration || 0;
@@ -106,14 +108,15 @@ const Player = (() => {
       if (!endReported && v.duration && v.currentTime / v.duration >= 0.9) { endReported = true; if (opt.onEnd) opt.onEnd(); }
     });
     v.addEventListener('progress', draw);
-    v.addEventListener('play', () => { setIcon(play, 'pause'); play.setAttribute('aria-label', 'إيقاف مؤقت'); root.classList.add('playing'); big.hidden = true; showBar(); });
+    v.addEventListener('play', () => { if (locked) { v.pause(); return; } setIcon(play, 'pause'); play.setAttribute('aria-label', 'إيقاف مؤقت'); root.classList.add('playing'); big.hidden = true; showBar(); });
     v.addEventListener('pause', () => { setIcon(play, 'play'); play.setAttribute('aria-label', 'تشغيل'); root.classList.remove('playing'); root.classList.add('ui'); if (opt.onProgress) opt.onProgress(v.currentTime, v.duration); });
     v.addEventListener('waiting', () => { spin.hidden = false; });
-    v.addEventListener('playing', () => { spin.hidden = true; note.hidden = true; });
+    v.addEventListener('playing', () => { if (locked) { v.pause(); return; } retried = 0; spin.hidden = true; note.hidden = true; });
     v.addEventListener('canplay', () => { spin.hidden = true; });
     v.addEventListener('ended', () => { if (opt.onEnd && !endReported) { endReported = true; opt.onEnd(); } });
     v.addEventListener('volumechange', () => { setIcon(mute, v.muted || v.volume === 0 ? 'mute' : 'volume'); mute.setAttribute('aria-label', v.muted ? 'تشغيل الصوت' : 'كتم الصوت'); if (!v.muted) vol.value = String(v.volume); });
     v.addEventListener('error', async () => {
+      if (locked) return;
       if (!opt.refresh || retried > 2) { spin.hidden = true; note.textContent = 'تعذر تشغيل الفيديو. تأكد من الإنترنت وجرّب تاني.'; note.hidden = false; return; }
       retried++;
       const at = v.currentTime, was = !v.paused;
@@ -142,6 +145,7 @@ const Player = (() => {
     speed.addEventListener('click', () => { const i = SPEEDS.indexOf(v.playbackRate); v.playbackRate = SPEEDS[(i + 1) % SPEEDS.length]; speed.textContent = v.playbackRate + 'x'; flashMsg('السرعة ' + v.playbackRate + 'x'); });
     const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
     full.addEventListener('click', async () => {
+      if (root.classList.contains('pseudo-full')) { root.classList.remove('pseudo-full'); onFs(); return; }
       try {
         if (fsEl()) await (document.exitFullscreen || document.webkitExitFullscreen).call(document);
         else {
@@ -151,29 +155,35 @@ const Player = (() => {
           try { await screen.orientation.lock('landscape'); } catch {}
         }
       } catch { root.classList.toggle('pseudo-full'); }
+      onFs();
     });
     const onFs = () => { const on = fsEl() === root || root.classList.contains('pseudo-full'); setIcon(full, on ? 'shrink' : 'expand'); full.setAttribute('aria-label', on ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'); };
     document.addEventListener('fullscreenchange', onFs);
     document.addEventListener('webkitfullscreenchange', onFs);
     root.addEventListener('mousemove', showBar);
+    root.addEventListener('pointerdown', e => { if (!e.target.closest('button,input')) root.focus({ preventScroll: true }); });
     root.addEventListener('keydown', e => {
-      if (e.target === range || e.target === vol) return;
+      if (e.target.matches('input,textarea,select')) return;
       const k = e.key.toLowerCase();
       if (k === ' ' || k === 'k') { e.preventDefault(); toggle(); }
-      else if (k === 'arrowright') { e.preventDefault(); jump(document.dir === 'rtl' ? -5 : 5); }
-      else if (k === 'arrowleft') { e.preventDefault(); jump(document.dir === 'rtl' ? 5 : -5); }
-      else if (k === 'f') full.click();
+      else if (k === 'arrowright') { e.preventDefault(); jump(5); }
+      else if (k === 'arrowleft') { e.preventDefault(); jump(-5); }
+      else if (k === 'f') { e.preventDefault(); full.click(); }
+      else if (k === 'escape' && root.classList.contains('pseudo-full')) full.click();
+      else if (k === 'j') { e.preventDefault(); jump(-10); }
+      else if (k === 'l') { e.preventDefault(); jump(10); }
+      else if (/^[0-9]$/.test(k) && Number.isFinite(v.duration)) { e.preventDefault(); v.currentTime = v.duration * Number(k) / 10; }
       else if (k === 'm') mute.click();
       else if (k === 'arrowup') { e.preventDefault(); v.volume = Math.min(1, v.volume + 0.1); }
       else if (k === 'arrowdown') { e.preventDefault(); v.volume = Math.max(0, v.volume - 0.1); }
     });
     const hidden = () => { if (document.hidden && !v.paused) v.pause(); };
     document.addEventListener('visibilitychange', hidden);
-    const unmark = watermark(root, opt.mark || {}, () => { v.pause(); note.textContent = 'العلامة المائية لازم تفضل ظاهرة علشان الفيديو يشتغل.'; note.hidden = false; });
+    const unmark = watermark(root, opt.mark || {}, () => { locked = true; root.dataset.locked = 'true'; v.pause(); v.removeAttribute('src'); v.load(); spin.hidden = true; big.hidden = true; note.textContent = 'توقف الفيديو لحماية المحتوى. حدّث الصفحة لاستعادة العلامة المائية والتشغيل.'; note.hidden = false; });
     root.classList.add('ui');
     active = () => {
       if (opt.onProgress && v.currentTime) opt.onProgress(v.currentTime, v.duration);
-      unmark();
+      clearTimeout(hideTimer); unmark();
       document.removeEventListener('fullscreenchange', onFs);
       document.removeEventListener('webkitfullscreenchange', onFs);
       document.removeEventListener('visibilitychange', hidden);
@@ -202,7 +212,7 @@ const Player = (() => {
     box.replaceChildren(root);
     guard(root);
     let closed = false, doc = null, scale = 0, io = null;
-    const mark = [opt.mark && opt.mark.name, opt.mark && opt.mark.phone].filter(Boolean).join(' · ');
+    const mark = [opt.mark && opt.mark.name, opt.mark && opt.mark.phone].filter(Boolean).join(' - ');
     copy.addEventListener('click', async () => {
       copy.disabled = true;
       const w = window.open('', '_blank');

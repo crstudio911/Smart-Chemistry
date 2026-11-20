@@ -17,6 +17,7 @@ function showTab(name) {
   $('#auth-tabs').hidden = name !== 'login' && name !== 'register';
   tabs.forEach(t => { const on = t.dataset.tab === name; t.classList.toggle('active', on); t.setAttribute('aria-selected', String(on)); });
   Object.entries(panels).forEach(([k, p]) => { p.hidden = k !== name; });
+  if (name === 'register' || name === 'forgot' || name === 'fix') App.prepare(name);
 }
 tabs.forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
 function setError(input, text) {

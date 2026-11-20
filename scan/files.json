@@ -1,5 +1,5 @@
 {
- "version": "14",
+ "version": "16",
  "files": [
   "404.html",
   "404/404.css",
@@ -44,6 +44,8 @@
   "periodic/vendor/LICENSE-three.txt",
   "periodic/vendor/OrbitControls.js",
   "periodic/vendor/three.module.min.js",
-  "sw.js"
+  "sw.js",
+  "404/secured.html",
+  "scan/files.json"
  ]
 }

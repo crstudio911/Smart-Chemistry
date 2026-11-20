@@ -631,7 +631,8 @@ async function start(data) {
 }
 $('#user-retry').addEventListener('click', loadUser);
 $('#courses-retry')?.addEventListener('click', () => refreshBoot(false));
-$('#profile-cancel')?.addEventListener('click', () => { resetProfile(); feedback($('#profile-feedback'), 'تم إلغاء التغييرات غير المحفوظة.', 'info'); });
+$('#profile-cancel')?.addEventListener('click', () => { $('#profile-verify').hidden = true; $('#profile-email').readOnly = false; $('#profile-password').value = ''; $('#profile-otp').value = ''; resetProfile(); feedback($('#profile-feedback'), 'تم إلغاء التغييرات غير المحفوظة.', 'info'); });
+$('#profile-email')?.addEventListener('focus', () => App.prepare('profile'), { once: true });
 $('#profile-form')?.addEventListener('submit', async e => {
   e.preventDefault();
   if (!user) return;
@@ -644,11 +645,13 @@ $('#profile-form')?.addEventListener('submit', async e => {
   const controls = [...document.querySelectorAll('#profile-form input, #profile-cancel')];
   App.busy(btn, true);
   controls.forEach(n => { n.disabled = true; });
-  const r = await App.api('profile', { token, email: email.value });
+  const pending = !$('#profile-verify').hidden;
+  const r = pending ? await App.api('profileVerify', { token, otp: $('#profile-otp').value.trim() }) : await App.api('profile', { token, email: email.value, password: $('#profile-password').value });
   App.busy(btn, false);
   controls.forEach(n => { n.disabled = false; });
   if (expired(r.code)) return;
-  if (r.ok && r.user) { showUser(r.user); feedback(box, 'تم حفظ بيانات التواصل بنجاح.', 'success'); }
+  if (r.ok && r.pending) { $('#profile-verify').hidden = false; $('#profile-email').readOnly = true; $('#profile-password').value = ''; $('#profile-otp').focus(); feedback(box, 'أرسلنا كودًا للبريد الجديد. اكتبه لتأكيد التغيير.', 'info'); }
+  else if (r.ok && r.user) { $('#profile-verify').hidden = true; $('#profile-email').readOnly = false; $('#profile-password').value = ''; $('#profile-otp').value = ''; showUser(r.user); feedback(box, 'تم حفظ بيانات التواصل بنجاح.', 'success'); }
   else feedback(box, App.message(r.code));
 });
 $('[data-logout]').addEventListener('click', async () => {

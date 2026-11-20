@@ -25,7 +25,6 @@
     setInterval(() => check(false), 30000);
   }
   if (page === 'blocked') {
-    if (!/\/404\/404\.html$/.test(location.pathname)) { location.replace(new URL('no.html', location.href)); return; }
     const info = await DB.get('kv', 'blocked');
     const reasons = { devtools: 'محاولة فتح أدوات المطور', source: 'محاولة عرض كود الصفحة', server: 'طلبات مشبوهة اترصدت على الخادم', attack: 'طلبات مشبوهة اترصدت على الخادم', tamper: 'محاولة تعديل الصفحة' };
     if (info && info.reason) $('#reason').textContent = 'السبب: ' + (reasons[info.reason] || reasons.tamper) + '.';

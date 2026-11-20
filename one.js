@@ -80,6 +80,7 @@ const App = (() => {
   }
   const messages = {
     network: 'تعذر الاتصال بالخادم. تأكد من الإنترنت وحاول تاني.',
+    wrong_password: 'كلمة المرور الحالية غير صحيحة.',
     invalid: 'رقم الهاتف أو كلمة المرور غير صحيحة.',
     locked: 'محاولات كتير غلط. استنى ربع ساعة وحاول تاني.',
     wait: 'حسابك تحت المراجعة ولم يتم تفعيله بعد. بياناتك وصلت للإدارة؛ تقدر تسجّل الدخول بعد الموافقة على حسابك.',
@@ -122,9 +123,32 @@ const App = (() => {
     quiz_closed: 'الوقت المسموح خلص.',
     quiz_time: 'الوقت خلص.',
     slow: 'طلبات كتير ورا بعض. استنى دقيقة وحاول تاني.',
+    human: 'تعذر التحقق من جهازك. حدّث الصفحة وحاول تاني.',
     server: 'حصلت مشكلة في الخادم. حاول تاني بعد شوية.'
   };
+  const HUMAN = ['register', 'forgot', 'fix', 'profile'];
+  const proofs = new Map();
+  function prepare(action) {
+    const hit = proofs.get(action);
+    if (hit && hit.until > Date.now()) return hit.proof;
+    const until = Date.now() + 8 * 60000;
+    const proof = send('challenge', { for: action }).then(r => (r.ok && typeof r.c === 'string' ? Pow.solve(r.c, r.n, r.bits) : null)).catch(() => null);
+    proofs.set(action, { until, proof });
+    proof.then(p => { if (!p && proofs.get(action)?.proof === proof) proofs.delete(action); });
+    return proof;
+  }
   async function api(action, payload = {}, opts = {}) {
+    if (!HUMAN.includes(action)) return send(action, payload, opts);
+    for (let i = 0; i < 2; i++) {
+      const pow = await prepare(action);
+      proofs.delete(action);
+      if (!pow) return { ok: false, code: 'network' };
+      const r = await send(action, { ...payload, pow }, opts);
+      if (r.code !== 'human') return r;
+    }
+    return { ok: false, code: 'human' };
+  }
+  async function send(action, payload = {}, opts = {}) {
     await ready;
     let res;
     try {
@@ -146,13 +170,52 @@ const App = (() => {
   }
   const message = code => messages[code] || messages.server;
   return {
-    initTheme, api, message,
+    initTheme, api, message, prepare,
     busy(btn, on) { btn.disabled = on; btn.classList.toggle('loading', on); btn.setAttribute('aria-busy', String(on)); },
     ready,
     token: () => cache.token,
     setToken: t => { cache.token = t; return DB.put('kv', t, 'token'); },
     clearToken: () => { cache.token = null; return DB.del('kv', 'token'); }
   };
+})();
+const Pow = (() => {
+  const K = new Uint32Array([0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]);
+  const W = new Uint32Array(64), buf = new Uint8Array(64);
+  const r = (x, n) => (x >>> n) | (x << (32 - n));
+  function head(str) {
+    const n = str.length, len = ((n + 72) >> 6) << 6, b = len === buf.length ? buf.fill(0) : new Uint8Array(len);
+    for (let i = 0; i < n; i++) b[i] = str.charCodeAt(i) & 255;
+    b[n] = 0x80;
+    const bits = n * 8;
+    b[len - 4] = bits >>> 24; b[len - 3] = bits >>> 16; b[len - 2] = bits >>> 8; b[len - 1] = bits;
+    let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a, h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
+    for (let o = 0; o < len; o += 64) {
+      for (let i = 0; i < 16; i++) W[i] = (b[o + i * 4] << 24) | (b[o + i * 4 + 1] << 16) | (b[o + i * 4 + 2] << 8) | b[o + i * 4 + 3];
+      for (let i = 16; i < 64; i++) {
+        const a = W[i - 15], c = W[i - 2];
+        W[i] = (W[i - 16] + (r(a, 7) ^ r(a, 18) ^ (a >>> 3)) + W[i - 7] + (r(c, 17) ^ r(c, 19) ^ (c >>> 10))) | 0;
+      }
+      let a = h0, bb = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+      for (let i = 0; i < 64; i++) {
+        const t1 = (h + (r(e, 6) ^ r(e, 11) ^ r(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + W[i]) | 0;
+        const t2 = ((r(a, 2) ^ r(a, 13) ^ r(a, 22)) + ((a & bb) ^ (a & c) ^ (bb & c))) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = bb; bb = a; a = (t1 + t2) | 0;
+      }
+      h0 = (h0 + a) | 0; h1 = (h1 + bb) | 0; h2 = (h2 + c) | 0; h3 = (h3 + d) | 0; h4 = (h4 + e) | 0; h5 = (h5 + f) | 0; h6 = (h6 + g) | 0; h7 = (h7 + h) | 0;
+    }
+    return h0 >>> 0;
+  }
+  const pause = () => new Promise(done => { const ch = new MessageChannel(); ch.port1.onmessage = () => { ch.port1.close(); done(); }; ch.port2.postMessage(0); });
+  async function solve(c, seed, bits) {
+    if (typeof seed !== 'string' || !/^[A-Za-z0-9_-]{16,40}$/.test(seed)) return null;
+    const n = Math.min(Math.max(Number(bits) || 18, 1), 24), shift = 32 - n, prefix = seed + '.';
+    for (let x = 0; x < 1e9; x += 4000) {
+      for (let y = x; y < x + 4000; y++) if (head(prefix + y) >>> shift === 0) return { c, x: String(y) };
+      await pause();
+    }
+    return null;
+  }
+  return Object.freeze({ head, solve });
 })();
 const Rules = Object.freeze({
   name: v => /^[\u0621-\u064Aa-zA-Z]{2,}( [\u0621-\u064Aa-zA-Z]{2,})+$/.test(v) && v.length <= 60,
@@ -199,12 +262,12 @@ const Guard = (() => {
   async function block(reason) {
     if (off) return;
     await DB.put('kv', { at: Date.now(), reason }, 'blocked');
-    go('404.html', false);
+    go('secured.html', false);
   }
   async function report(reason) {
     if (off || leaving) return;
-    await App.api('flag', { reason });
-    block(reason);
+    if (reason === 'tamper') { await App.api('flag', { reason }); block(reason); }
+    else go('secured.html');
   }
   async function checkTime() {
     const last = await DB.get('kv', 'time');
@@ -237,7 +300,9 @@ const Guard = (() => {
       go('err.html');
     });
     App.ready.then(async () => {
-      if (await DB.get('kv', 'blocked')) { go('404.html', false); return; }
+      const blocked = await DB.get('kv', 'blocked');
+      if (blocked && Date.now() - blocked.at < 86400000) { go('secured.html', false); return; }
+      if (blocked) await DB.del('kv', 'blocked');
       if (!navigator.onLine) { go('dis.html'); return; }
       Site.load().then(r => { if (r && r.settings && r.settings.maintenance) go('update.html'); });
       checkTime();
@@ -274,7 +339,7 @@ const Site = (() => {
     if (!grid || !Array.isArray(r.stages) || !r.stages.length) return;
     const icon = grid.querySelector('.more svg');
     grid.replaceChildren(...r.stages.map(st => {
-      const a = document.createElement('a'); a.className = 'grade'; a.href = s.registration_open === false ? 'login/login.html' : 'login/login.html#register';
+      const a = document.createElement('a'); a.className = 'grade'; a.href = App.token() ? 'main/main.html#courses' : s.registration_open === false ? 'login/login.html' : 'login/login.html#register';
       const el = document.createElement('div'); el.className = 'element'; el.dir = 'ltr'; el.setAttribute('aria-hidden', 'true');
       const n = document.createElement('small'); n.textContent = st.number || '';
       const b = document.createElement('b'); b.textContent = st.symbol || st.name.trim().charAt(0);
@@ -329,3 +394,22 @@ const Social = (() => {
     boxes.forEach(b => { const list = Social.links(map); b.replaceChildren(...list); b.hidden = !list.length; });
   });
 })();
+
+App.ready.then(() => {
+  if (!App.token()) return;
+  function updateLinks() {
+    document.querySelectorAll('a[href]').forEach(a => {
+      const u = new URL(a.getAttribute('href'), location.href);
+      if (u.origin !== location.origin || u.pathname !== new URL('login/login.html', BASE).pathname) return;
+      const register = u.hash === '#register';
+      if (register && a.closest('footer nav')) { a.hidden = true; return; }
+      const courses = !!a.closest('.grade') || register;
+      a.href = new URL('main/main.html' + (courses ? '#courses' : ''), BASE).href;
+      const text = a.querySelector('.more') || a;
+      [...text.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).forEach(n => n.textContent = courses ? 'دوراتي' : 'حسابي');
+    });
+  }
+  updateLinks();
+  const grid = document.querySelector('#grades .grades');
+  if (grid) new MutationObserver(updateLinks).observe(grid, { childList: true });
+});
