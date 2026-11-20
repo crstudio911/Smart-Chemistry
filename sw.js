@@ -18,3 +18,8 @@ self.addEventListener('fetch', e => {
   }
   if (FILES.some(f => url.href.split('?')[0] === at(f))) e.respondWith(fetch(req).catch(async () => (await caches.match(req, { ignoreSearch: true })) || Response.error()));
 });
+
+
+
+
+
