@@ -1,0 +1,4 @@
+wrangler.jsonc
+.assetsignore
+AGENTS.md
+**/AGENTS.md

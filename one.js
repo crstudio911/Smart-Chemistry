@@ -255,6 +255,18 @@ const Guard = (() => {
   const secured = document.body && document.body.dataset.page === 'blocked';
   let leaving = false, sent = 0;
   const here = () => location.pathname + location.search + location.hash;
+  function connected() {
+    return new Promise(resolve => {
+      const img = new Image();
+      const finish = ok => { clearTimeout(timer); img.onload = img.onerror = null; resolve(ok); };
+      const timer = setTimeout(() => finish(false), 6000);
+      img.onload = () => finish(img.naturalWidth > 0);
+      img.onerror = () => finish(false);
+      const url = new URL('img/logo.png', BASE);
+      url.searchParams.set('sc-network', Date.now() + '-' + Math.random());
+      img.src = url.href;
+    });
+  }
   function go(page, back = true) {
     if (leaving || (off && page !== 'secured.html') || (secured && page === 'secured.html')) return;
     leaving = true;
@@ -307,7 +319,7 @@ const Guard = (() => {
   }, true);
   setInterval(watch, 1500);
   if (!off) {
-    window.addEventListener('offline', () => go('dis.html'));
+    window.addEventListener('offline', async () => { if (!await connected()) go('dis.html'); });
     window.addEventListener('error', async e => {
       if (!e.filename || !e.filename.startsWith(BASE.href) || e.filename.includes('/vendor/') || /ResizeObserver/.test(e.message || '')) return;
       const last = await DB.get('kv', 'err');
@@ -319,7 +331,7 @@ const Guard = (() => {
   App.ready.then(async () => {
     if (await active()) { go('secured.html', false); return; }
     if (off) return;
-    if (!navigator.onLine) { go('dis.html'); return; }
+    if (!navigator.onLine && !await connected()) { go('dis.html'); return; }
     Site.load().then(r => { if (r && r.settings && r.settings.maintenance) go('update.html'); });
     checkTime();
   });
@@ -327,7 +339,7 @@ const Guard = (() => {
     navigator.serviceWorker.register(new URL('sw.js', BASE), { scope: BASE.pathname }).catch(() => {});
     if (navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => {});
   }
-  return { go, block, report, active, checkTime };
+  return { go, block, report, active, checkTime, connected };
 })();
 const Support = (() => {
   async function phones(extra) {

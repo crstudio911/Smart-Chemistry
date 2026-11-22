@@ -4,12 +4,12 @@
   const params = new URLSearchParams(location.search);
   const home = new URL('index.html', BASE);
   const back = (() => {
-    const b = params.get('back') || '';
+    const b = params.get('back') || (page === 'dis' && location.pathname !== new URL('404/dis.html', BASE).pathname ? location.pathname + location.search + location.hash : '');
     if (!/^\/(?!\/)/.test(b) || b.includes('\\') || /\/404\//.test(b)) return null;
     const u = new URL(b, location.origin);
     return u.origin === location.origin ? u : null;
   })();
-  const leave = () => location.replace(back || home);
+  const leave = () => { if (back && back.href === location.href) location.reload(); else location.replace(back || home); };
   const say = (text, type = 'error') => { const box = $('#feedback'); if (!box) return; box.textContent = text; box.dataset.type = type; box.hidden = !text; };
   const time = (ms, zone) => new Intl.DateTimeFormat('ar-EG', { hour: 'numeric', minute: '2-digit', second: '2-digit', day: 'numeric', month: 'short', ...(zone ? { timeZone: zone } : {}) }).format(new Date(ms));
   await App.ready;
@@ -118,9 +118,21 @@
     check(false);
   }
   if (page === 'dis') {
-    const tryBack = () => { if (navigator.onLine) leave(); else say('لسه مفيش اتصال بالإنترنت.', 'info'); };
-    window.addEventListener('online', () => { say('رجع الاتصال. جاري رجوعك…', 'success'); setTimeout(leave, 700); });
-    $('#retry').addEventListener('click', tryBack);
+    let checking = false, returning = false;
+    const tryBack = async manual => {
+      if (checking || returning) return;
+      checking = true;
+      const btn = $('#retry');
+      App.busy(btn, true);
+      const ok = await Guard.connected();
+      checking = false;
+      App.busy(btn, false);
+      if (ok) { returning = true; say('رجع الاتصال. جاري رجوعك…', 'success'); setTimeout(leave, 700); }
+      else if (manual) say('لسه الاتصال بالموقع مش متاح. جرّب تاني بعد شوية.', 'info');
+    };
+    window.addEventListener('online', () => tryBack(false));
+    $('#retry').addEventListener('click', () => tryBack(true));
+    setInterval(() => tryBack(false), 15000);
   }
   if (page === 'no') {
     $('#main').href = new URL(App.token() ? 'main/main.html' : 'login/login.html', BASE).href;

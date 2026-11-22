@@ -1,5 +1,5 @@
 self.SC_FILES = {
- "version": "17",
+ "version": "19",
  "files": [
   "404.html",
   "404/404.css",
