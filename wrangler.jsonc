@@ -1,9 +1,12 @@
 {
   "name": "smart-chemistry",
+  "main": "404/worker.js",
   "compatibility_date": "2026-11-22",
   "keep_vars": true,
   "assets": {
     "directory": ".",
-    "not_found_handling": "404-page"
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none"
   }
 }

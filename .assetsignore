@@ -2,3 +2,8 @@ wrangler.jsonc
 .assetsignore
 AGENTS.md
 **/AGENTS.md
+404/worker.js
+.git
+.github
+README.md
+.gitignore

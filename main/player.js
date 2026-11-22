@@ -65,22 +65,33 @@ const Player = (() => {
     const seek = el('div', 'pl-seek');
     const buffered = el('span', 'pl-buffered'), played = el('span', 'pl-played');
     const range = el('input', 'pl-range'); range.type = 'range'; range.min = '0'; range.max = '1000'; range.step = '1'; range.value = '0'; range.setAttribute('aria-label', 'مكان التشغيل');
-    seek.append(buffered, played, range);
+    const tip = el('span', 'pl-tip'); tip.dir = 'ltr'; tip.hidden = true;
+    seek.append(buffered, played, range, tip);
     const play = btn('play', 'تشغيل'), back = btn('rewind', 'رجوع 10 ثواني'), fwd = btn('forward', 'تقديم 10 ثواني');
     const time = el('span', 'pl-time', '0:00 / 0:00'); time.dir = 'ltr';
     const mute = btn('volume', 'كتم الصوت');
     const vol = el('input', 'pl-vol'); vol.type = 'range'; vol.min = '0'; vol.max = '1'; vol.step = '0.05'; vol.value = '1'; vol.setAttribute('aria-label', 'مستوى الصوت');
     const speed = el('button', 'pl-btn pl-speed', '1x'); speed.type = 'button'; speed.setAttribute('aria-label', 'سرعة التشغيل'); speed.dir = 'ltr';
     const full = btn('expand', 'ملء الشاشة');
+    const keys = btn('keyboard', 'اختصارات الكيبورد', 'pl-keys');
+    const help = el('div', 'pl-help'); help.hidden = true; help.setAttribute('role', 'dialog'); help.setAttribute('aria-label', 'اختصارات الكيبورد');
+    const helpBox = el('div', 'pl-help-box');
+    helpBox.append(el('strong', '', 'اختصارات الكيبورد'));
+    const list = el('dl', 'pl-help-list');
+    [['K / Space', 'تشغيل وإيقاف'], ['F', 'ملء الشاشة'], ['M', 'كتم الصوت'], ['← / →', 'رجوع وتقديم 5 ثواني'], ['J / L', 'رجوع وتقديم 10 ثواني'], ['↑ / ↓', 'علو ووطي الصوت'], ['0 - 9', 'انتقل لجزء من الفيديو'], ['Home / End', 'البداية والنهاية'], ['< / >', 'أبطأ وأسرع'], ['?', 'إظهار الاختصارات']].forEach(([k, t]) => { const d = el('div'); const dt = el('dt', '', k); dt.dir = 'ltr'; d.append(dt, el('dd', '', t)); list.append(d); });
+    const helpClose = el('button', 'btn outline small', 'تمام'); helpClose.type = 'button';
+    helpBox.append(list, helpClose);
+    help.append(helpBox);
+    const pulse = el('div', 'pl-pulse'); pulse.setAttribute('aria-hidden', 'true'); pulse.append(icon('play'));
     const row = el('div', 'pl-row');
     const left = el('div', 'pl-group'), right = el('div', 'pl-group');
     right.append(play, back, fwd, time);
-    left.append(mute, vol, speed, full);
+    left.append(mute, vol, speed, keys, full);
     row.append(right, left);
     bar.append(seek, row);
     const tapL = el('div', 'pl-tap pl-tap-l'), tapR = el('div', 'pl-tap pl-tap-r');
     const flash = el('div', 'pl-flash');
-    root.append(v, shade, tapR, tapL, big, spin, flash, note, bar);
+    root.append(v, shade, tapR, tapL, big, spin, pulse, flash, note, bar, help);
     box.replaceChildren(root);
     guard(root);
     const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -89,7 +100,12 @@ const Player = (() => {
     const showBar = () => { root.classList.add('ui'); clearTimeout(hideTimer); if (!v.paused) hideTimer = setTimeout(() => root.classList.remove('ui'), 2600); };
     const flashMsg = t => { flash.textContent = t; flash.classList.remove('on'); void flash.offsetWidth; flash.classList.add('on'); };
     const setIcon = (b, name) => b.querySelector('use').setAttribute('href', '#' + name);
-    const toggle = () => { if (locked) return; if (v.paused) v.play().catch(() => {}); else v.pause(); };
+    const beat = name => { setIcon(pulse, name); pulse.classList.remove('on'); void pulse.offsetWidth; pulse.classList.add('on'); };
+    const toggle = () => { if (locked) return; if (v.paused) { v.play().catch(() => {}); beat('play'); } else { v.pause(); beat('pause'); } };
+    const setRate = r => { v.playbackRate = r; speed.textContent = r + 'x'; flashMsg('السرعة ' + r + 'x'); showBar(); };
+    const setVol = x => { v.volume = Math.round(Math.min(1, Math.max(0, x)) * 100) / 100; v.muted = v.volume === 0; flashMsg('الصوت ' + Math.round(v.volume * 100) + '%'); showBar(); };
+    const goTo = t => { if (!Number.isFinite(v.duration)) return; v.currentTime = Math.min(Math.max(0, t), v.duration - 0.2); draw(); showBar(); };
+    const showHelp = on => { help.hidden = !on; if (on) helpClose.focus({ preventScroll: true }); else root.focus({ preventScroll: true }); };
     const jump = s => { if (!Number.isFinite(v.duration)) return; v.currentTime = Math.min(Math.max(0, v.currentTime + s), v.duration - 0.2); flashMsg((s > 0 ? '+' : '−') + Math.abs(s) + ' ث'); showBar(); };
     const draw = () => {
       const d = v.duration || 0;
@@ -140,9 +156,17 @@ const Player = (() => {
       setTimeout(() => { if (tapAt === now) { if (matchMedia('(pointer:coarse)').matches) { if (root.classList.contains('ui') && !v.paused) root.classList.remove('ui'); else showBar(); } else toggle(); } }, 330);
     }));
     range.addEventListener('input', () => { if (v.duration) { v.currentTime = Number(range.value) / 1000 * v.duration; draw(); } });
-    mute.addEventListener('click', () => { v.muted = !v.muted; });
+    mute.addEventListener('click', () => { v.muted = !v.muted; flashMsg(v.muted ? 'الصوت مكتوم' : 'الصوت ' + Math.round(v.volume * 100) + '%'); });
+    keys.addEventListener('click', () => showHelp(help.hidden));
+    helpClose.addEventListener('click', () => showHelp(false));
+    help.addEventListener('click', e => { if (e.target === help) showHelp(false); });
+    seek.addEventListener('pointermove', e => { if (!v.duration || e.pointerType !== 'mouse') return; const r = seek.getBoundingClientRect(); const x = Math.min(Math.max(e.clientX - r.left, 0), r.width); tip.textContent = clock(x / r.width * v.duration); tip.style.setProperty('--x', x + 'px'); tip.hidden = false; });
+    seek.addEventListener('pointerleave', () => { tip.hidden = true; });
+    range.addEventListener('change', () => root.focus({ preventScroll: true }));
+    vol.addEventListener('change', () => root.focus({ preventScroll: true }));
+    root.addEventListener('click', e => { if (e.detail > 0 && e.target.closest('.pl-bar button')) root.focus({ preventScroll: true }); });
     vol.addEventListener('input', () => { v.volume = Number(vol.value); v.muted = v.volume === 0; });
-    speed.addEventListener('click', () => { const i = SPEEDS.indexOf(v.playbackRate); v.playbackRate = SPEEDS[(i + 1) % SPEEDS.length]; speed.textContent = v.playbackRate + 'x'; flashMsg('السرعة ' + v.playbackRate + 'x'); });
+    speed.addEventListener('click', () => { const i = SPEEDS.indexOf(v.playbackRate); setRate(SPEEDS[(i + 1) % SPEEDS.length]); });
     const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
     full.addEventListener('click', async () => {
       if (root.classList.contains('pseudo-full')) { root.classList.remove('pseudo-full'); onFs(); return; }
@@ -162,21 +186,39 @@ const Player = (() => {
     document.addEventListener('webkitfullscreenchange', onFs);
     root.addEventListener('mousemove', showBar);
     root.addEventListener('pointerdown', e => { if (!e.target.closest('button,input')) root.focus({ preventScroll: true }); });
-    root.addEventListener('keydown', e => {
-      if (e.target.matches('input,textarea,select')) return;
-      const k = e.key.toLowerCase();
-      if (k === ' ' || k === 'k') { e.preventDefault(); toggle(); }
-      else if (k === 'arrowright') { e.preventDefault(); jump(5); }
-      else if (k === 'arrowleft') { e.preventDefault(); jump(-5); }
-      else if (k === 'f') { e.preventDefault(); full.click(); }
-      else if (k === 'escape' && root.classList.contains('pseudo-full')) full.click();
-      else if (k === 'j') { e.preventDefault(); jump(-10); }
-      else if (k === 'l') { e.preventDefault(); jump(10); }
-      else if (/^[0-9]$/.test(k) && Number.isFinite(v.duration)) { e.preventDefault(); v.currentTime = v.duration * Number(k) / 10; }
-      else if (k === 'm') mute.click();
-      else if (k === 'arrowup') { e.preventDefault(); v.volume = Math.min(1, v.volume + 0.1); }
-      else if (k === 'arrowdown') { e.preventDefault(); v.volume = Math.max(0, v.volume - 0.1); }
-    });
+    const typing = t => t instanceof Element && (t.isContentEditable || t.matches('textarea,select,input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button])'));
+    const onKey = e => {
+      if (!root.isConnected || locked || e.ctrlKey || e.metaKey || e.altKey || e.repeat && !/^arrow/i.test(e.key)) return;
+      if (typing(e.target)) return;
+      const focus = document.activeElement;
+      const inside = !focus || focus === document.body || root.contains(focus) || fsEl() === root || root.classList.contains('pseudo-full');
+      if (!inside && !root.matches(':hover')) return;
+      const box = root.getBoundingClientRect();
+      if (box.bottom < 0 || box.top > innerHeight || box.width === 0) return;
+      if (!help.hidden) { if (e.key === 'Escape' || e.key === '?') { e.preventDefault(); showHelp(false); } return; }
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      const code = e.code;
+      let done = true;
+      if (k === ' ' || k === 'k' || code === 'KeyK') toggle();
+      else if (k === 'f' || code === 'KeyF') full.click();
+      else if (k === 'm' || code === 'KeyM') mute.click();
+      else if (k === 'ArrowRight') jump(5);
+      else if (k === 'ArrowLeft') jump(-5);
+      else if (k === 'l' || code === 'KeyL') jump(10);
+      else if (k === 'j' || code === 'KeyJ') jump(-10);
+      else if (k === 'ArrowUp') setVol((v.muted ? 0 : v.volume) + 0.05);
+      else if (k === 'ArrowDown') setVol((v.muted ? 0 : v.volume) - 0.05);
+      else if (k === 'Home') goTo(0);
+      else if (k === 'End') goTo(v.duration);
+      else if (/^Digit[0-9]$|^Numpad[0-9]$/.test(code) && Number.isFinite(v.duration)) goTo(v.duration * Number(code.slice(-1)) / 10);
+      else if (k === '>' || (e.shiftKey && code === 'Period')) setRate(SPEEDS[Math.min(SPEEDS.indexOf(v.playbackRate) + 1, SPEEDS.length - 1)] || 1);
+      else if (k === '<' || (e.shiftKey && code === 'Comma')) setRate(SPEEDS[Math.max(SPEEDS.indexOf(v.playbackRate) - 1, 0)] || 1);
+      else if (k === '?' || (e.shiftKey && code === 'Slash')) showHelp(true);
+      else if (k === 'Escape' && root.classList.contains('pseudo-full')) full.click();
+      else done = false;
+      if (done) { e.preventDefault(); e.stopPropagation(); }
+    };
+    document.addEventListener('keydown', onKey, true);
     const hidden = () => { if (document.hidden && !v.paused) v.pause(); };
     document.addEventListener('visibilitychange', hidden);
     const unmark = watermark(root, opt.mark || {}, () => { locked = true; root.dataset.locked = 'true'; v.pause(); v.removeAttribute('src'); v.load(); spin.hidden = true; big.hidden = true; note.textContent = 'توقف الفيديو لحماية المحتوى. حدّث الصفحة لاستعادة العلامة المائية والتشغيل.'; note.hidden = false; });
@@ -187,6 +229,7 @@ const Player = (() => {
       document.removeEventListener('fullscreenchange', onFs);
       document.removeEventListener('webkitfullscreenchange', onFs);
       document.removeEventListener('visibilitychange', hidden);
+      document.removeEventListener('keydown', onKey, true);
       v.pause(); v.removeAttribute('src'); v.load();
       root.remove();
     };

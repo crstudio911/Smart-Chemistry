@@ -1,13 +1,11 @@
 self.SC_FILES = {
- "version": "19",
+ "version": "21",
  "files": [
-  "404.html",
   "404/404.css",
   "404/404.html",
   "404/404.js",
   "404/dis.html",
   "404/err.html",
-  "404/no.html",
   "404/secured.html",
   "404/time.html",
   "404/update.html",

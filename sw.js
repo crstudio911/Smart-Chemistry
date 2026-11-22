@@ -1,6 +1,6 @@
-const CACHE = 'sc-offline-19';
+const CACHE = 'sc-offline-20';
 const FONTS = 'sc-fonts-1';
-const FILES = ['404/dis.html', '404/secured.html', '404/time.html', '404/err.html', '404/update.html', '404/no.html', '404/404.css', '404/404.js', 'one.css', 'one.js', 'img/logo.png'];
+const FILES = ['404/dis.html', '404/secured.html', '404/time.html', '404/err.html', '404/update.html', '404/404.html', '404/404.css', '404/404.js', 'one.css', 'one.js', 'img/logo.png'];
 const at = path => new URL(path, self.registration.scope).href;
 const clean = href => href.split('?')[0].split('#')[0];
 async function fill(force) {
@@ -8,7 +8,7 @@ async function fill(force) {
   await Promise.allSettled(FILES.map(async f => {
     if (!force && await c.match(at(f))) return;
     const r = await fetch(at(f), { cache: 'no-cache' });
-    if (r.ok && (f.endsWith('.html') ? (r.headers.get('content-type') || '').includes('text/html') : true)) await c.put(at(f), r);
+    if (r.ok && (f.endsWith('.html') ? (r.headers.get('content-type') || '').includes('text/html') : true)) await c.put(at(f), new Response(await r.blob(), { status: 200, headers: { 'Content-Type': r.headers.get('content-type') || 'application/octet-stream' } }));
   }));
   for (const f of FILES.filter(f => f !== 'img/logo.png')) {
     if (!await c.match(at(f))) throw new Error('Missing status asset: ' + f);
@@ -24,7 +24,7 @@ async function statusPage(page, status) {
   const html = (await hit.text()).replace(/\b(href|src)="([^"#]+)"/g, (all, key, value) => /^(https?:|data:|blob:)/.test(value) ? all : key + '="' + new URL(value, href).href + '"');
   return new Response(html, { status, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
-self.addEventListener('install', e => { e.waitUntil(fill(true).then(() => self.skipWaiting())); });
+self.addEventListener('install', e => { e.waitUntil(fill(true).catch(() => {}).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE && k !== FONTS).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {
   const req = e.request;
@@ -52,11 +52,11 @@ self.addEventListener('fetch', e => {
       })());
       return;
     }
-    e.respondWith(fetch(req, { cache: 'no-store' }).then(async r => {
+    e.respondWith(fetch(req).then(async r => {
       e.waitUntil(fill(false).catch(() => {}));
       if (r.status !== 404) return r;
       const hit = FILES.some(f => clean(url.href) === at(f)) ? await caches.match(clean(url.href)) : null;
-      return hit || statusPage('no', 404);
+      return hit || statusPage('404', 404);
     }).catch(async () => {
       if (FILES.some(f => clean(url.href) === at(f))) {
         const hit = await caches.match(clean(url.href));
