@@ -1,5 +1,5 @@
 {
- "version": "16",
+ "version": "17",
  "files": [
   "404.html",
   "404/404.css",
@@ -8,6 +8,7 @@
   "404/dis.html",
   "404/err.html",
   "404/no.html",
+  "404/secured.html",
   "404/time.html",
   "404/update.html",
   "img/lab.jpg",
@@ -44,8 +45,8 @@
   "periodic/vendor/LICENSE-three.txt",
   "periodic/vendor/OrbitControls.js",
   "periodic/vendor/three.module.min.js",
-  "sw.js",
-  "404/secured.html",
-  "scan/files.json"
+  "scan/files.js",
+  "scan/files.json",
+  "sw.js"
  ]
 }

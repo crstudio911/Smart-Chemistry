@@ -70,13 +70,19 @@ function showUser(data) {
   $('#user-name').textContent = user.name;
   $('#user-grade').textContent = user.grade;
   const photo = user.photo && /^https:\/\/i\.ibb\.co\//.test(user.photo) ? user.photo : '';
+  const letter = Array.from(String(user.name || '').trim())[0] || 'S';
+  for (const id of ['#user-initials', '#profile-placeholder']) { const n = $(id); if (n) { n.textContent = letter; n.hidden = false; } }
+  const shown = (img, ok) => { img.hidden = !ok; if (img.id === 'profile-photo' && $('#profile-placeholder')) $('#profile-placeholder').hidden = ok; };
   for (const id of ['#user-photo', '#profile-photo']) {
     const img = $(id);
     if (!img) continue;
-    img.hidden = !photo;
-    if (photo) { img.src = photo; img.onerror = () => { img.hidden = true; if ($('#profile-placeholder')) $('#profile-placeholder').hidden = false; }; }
+    if (!photo) { img.onload = img.onerror = null; img.removeAttribute('src'); shown(img, false); continue; }
+    img.onload = () => shown(img, img.naturalWidth > 8 && img.naturalHeight > 8);
+    img.onerror = () => shown(img, false);
+    if (img.getAttribute('src') === photo && img.complete) { shown(img, img.naturalWidth > 8 && img.naturalHeight > 8); continue; }
+    shown(img, false);
+    img.src = photo;
   }
-  if ($('#profile-placeholder')) $('#profile-placeholder').hidden = !!photo;
   for (const [id, value] of [['name', user.name], ['student', user.studentPhone], ['grade', user.grade], ['gender', user.gender]]) { const n = $('#profile-' + id); if (n) n.textContent = value || '—'; }
   if ($('#profile-created')) $('#profile-created').textContent = fmtDate(user.createdAt);
   if ($('#profile-mode')) $('#profile-mode').textContent = user.mode === 'center' ? 'سنتر' : 'أونلاين';

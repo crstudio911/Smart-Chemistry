@@ -6,7 +6,7 @@
   function phoneRow(p, text) {
     const row = document.createElement('div'); row.className = 'contact-row';
     const num = document.createElement('b'); num.dir = 'ltr'; num.textContent = p;
-    const wa = document.createElement('a'); wa.className = 'btn primary small'; wa.href = Rules.whatsapp(p, text); wa.target = '_blank'; wa.rel = 'noopener noreferrer'; wa.append(svg('chat'), 'واتساب');
+    const wa = document.createElement('a'); wa.className = 'btn primary small'; wa.href = Rules.whatsapp(p, text); wa.target = '_blank'; wa.rel = 'noopener noreferrer'; wa.append(Social.icon('whatsapp'), 'واتساب');
     const call = document.createElement('a'); call.className = 'btn outline small'; call.href = 'tel:' + p; call.append(svg('phone'), 'اتصال');
     row.append(num, wa, call);
     return row;

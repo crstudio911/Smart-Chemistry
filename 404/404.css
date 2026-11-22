@@ -16,3 +16,6 @@ body[data-tone=danger]{--tone:var(--danger)}body[data-tone=warn]{--tone:#F59E0B}
 @media (max-width:520px){.status-brand{inset-inline-start:16px}.clock-grid{grid-template-columns:1fr}.status-actions .btn{width:100%}}
 @media (prefers-reduced-motion:reduce){.countdown,.countdown b,.pulse{animation:none}}
 .status-card .hint{display:block;margin-top:14px}.clock-grid b{font-size:18px}
+.penalty{display:grid;gap:4px;margin:22px auto 0;max-width:470px;padding:16px;border-radius:var(--r-card);border:1px solid color-mix(in srgb,var(--tone,var(--accent)) 40%,var(--border));background:var(--surface)}.penalty small{color:var(--muted);font-size:13px}.penalty b{font-family:var(--latin);font-size:30px;letter-spacing:2px;color:var(--tone,var(--accent))}.penalty span{color:var(--muted);font-size:13px}
+.status-support{display:grid;gap:10px;margin:22px auto 0;max-width:470px}.status-support::before{content:"محتاج مساعدة؟ كلّم دعم المنصة";color:var(--muted);font-size:13px}.status-support .support-btn{justify-content:space-between}
+.status-support .support-btn{white-space:normal}.status-support .support-btn span{font-family:var(--latin);opacity:.85}

@@ -270,18 +270,7 @@ async function showSupport(reason) {
   if (!phones.length) { list.replaceChildren(Object.assign(document.createElement('p'), { className: 'alert', textContent: r ? 'أرقام الدعم لسه متضافتش. تواصل مع المستر أو السنتر مباشرة.' : App.message('network') })); return; }
   const me = $('#forgot-phone').value, parent = $('#forgot-parent').value;
   const text = ['السلام عليكم، محتاج مساعدة في استعادة حسابي على Smart Chemistry.', 'رقمي المسجل: ' + (Rules.phone(me) ? me : '……'), 'رقم ولي الأمر المسجل: ' + (Rules.phone(parent) ? parent : '……'), 'وهبعت نفس الصورة الشخصية اللي سجلت بيها للتحقق من الهوية.'].join('\n');
-  list.replaceChildren(...phones.map((p, i) => {
-    const a = document.createElement('a');
-    a.className = 'btn ' + (i ? 'outline' : 'primary') + ' full support-btn';
-    a.href = Rules.whatsapp(p, text);
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'icon'); svg.setAttribute('aria-hidden', 'true');
-    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use'); use.setAttribute('href', '#chat'); svg.append(use);
-    const num = document.createElement('span'); num.dir = 'ltr'; num.textContent = p;
-    a.append(svg, 'تواصل مع دعم المنصة', num);
-    return a;
-  }));
+  list.replaceChildren(...phones.map((p, i) => Support.button(p, text, !i)));
 }
 document.querySelectorAll('[data-support]').forEach(b => b.addEventListener('click', () => showSupport('')));
 function otpValue() { return boxes.map(b => b.value).join(''); }
